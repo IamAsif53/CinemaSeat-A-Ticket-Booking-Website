@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { CreditCard, ShieldCheck, Lock, Smartphone, KeyRound, AlertTriangle, ArrowRight } from 'lucide-react';
+import { CreditCard, ShieldCheck, Lock, Smartphone, KeyRound, AlertTriangle, ArrowRight, ShoppingBag } from 'lucide-react';
 import axios from 'axios';
+import { SnackItem } from '../types';
 
 interface PaymentModalProps {
   bookingRef: string;
   seatCode: string;
   amount: number;
+  selectedSnacks?: SnackItem[];
   onClose: () => void;
   onSuccess: (bookingRef: string) => void;
 }
@@ -14,6 +16,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   bookingRef,
   seatCode,
   amount,
+  selectedSnacks = [],
   onClose,
   onSuccess
 }) => {
@@ -156,9 +159,26 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
 
           {/* Amount Due Card */}
-          <div className="p-4 rounded-xl bg-dark-800 border border-gray-800 flex items-center justify-between">
-            <span className="text-xs text-gray-400 font-medium">Total Payable Amount</span>
-            <span className="text-lg font-black text-brand-400 font-sans">BDT {amount}</span>
+          <div className="p-4 rounded-xl bg-dark-800 border border-gray-800 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400 font-medium">Total Payable Amount</span>
+              <span className="text-lg font-black text-brand-400 font-sans">BDT {amount}</span>
+            </div>
+
+            {selectedSnacks && selectedSnacks.length > 0 && (
+              <div className="pt-2 border-t border-gray-700/60 text-[11px] text-gray-300 space-y-1">
+                <span className="font-bold text-amber-400 block flex items-center gap-1">
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>Included Concessions ({selectedSnacks.reduce((a, b) => a + b.quantity, 0)} items):</span>
+                </span>
+                {selectedSnacks.map(s => (
+                  <div key={s.id} className="flex justify-between text-[10px] text-gray-300">
+                    <span>• {s.name} (x{s.quantity})</span>
+                    <span>BDT {s.price * s.quantity}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Error Alert */}

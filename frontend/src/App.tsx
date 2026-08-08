@@ -6,9 +6,10 @@ import { HeroBanner } from './components/HeroBanner';
 import { MovieGrid } from './components/MovieGrid';
 import { MovieHeader } from './components/MovieHeader';
 import { SeatMap } from './components/SeatMap';
+import { SnackModal } from './components/SnackModal';
 import { PaymentModal } from './components/PaymentModal';
 import { TicketReceiptModal } from './components/TicketReceiptModal';
-import { Movie, Showtime, Seat } from './types';
+import { Movie, Showtime, Seat, SnackItem } from './types';
 import { MovieFallback } from './data/fallbackMovies';
 import { AlertTriangle, Activity } from 'lucide-react';
 
@@ -93,6 +94,10 @@ export function App() {
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
   
   const [isHolding, setIsHolding] = useState<boolean>(false);
+  const [showSnackModal, setShowSnackModal] = useState<boolean>(false);
+  const [selectedSnacks, setSelectedSnacks] = useState<SnackItem[]>([]);
+  const [totalCheckoutAmount, setTotalCheckoutAmount] = useState<number>(450);
+
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
   const [confirmedBookingRef, setConfirmedBookingRef] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
@@ -169,6 +174,7 @@ export function App() {
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
+    setSelectedSnacks([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -240,6 +246,7 @@ export function App() {
         setSelectedSeatCode(null);
         setHeldBookingRef(null);
         setHoldExpiresAt(null);
+        setSelectedSnacks([]);
 
         const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
         const storedBooked = getStoredBookedSeatCodes();
@@ -257,6 +264,7 @@ export function App() {
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
+    setSelectedSnacks([]);
   }, [heldBookingRef, showtime, selectedSeatCode, isLiveBackend]);
 
   // Handle Automatic Hold Expiration
@@ -267,7 +275,9 @@ export function App() {
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
+    setShowSnackModal(false);
     setShowPaymentModal(false);
+    setSelectedSnacks([]);
 
     setToastMessage({
       text: `⏰ Hold for seat ${seatCode} has expired! Seat released back to Available.`,
@@ -295,7 +305,6 @@ export function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
         {/* Toast Alert */}
         {toastMessage && (
           <div className={`mb-6 p-4 rounded-xl flex items-center justify-between text-sm font-semibold animate-fade-in ${
@@ -352,7 +361,10 @@ export function App() {
               onHoldSeat={handleHoldSeat}
               onCancelHold={handleCancelHold}
               onHoldExpired={handleHoldExpired}
-              onPaySeat={() => setShowPaymentModal(true)}
+              onPaySeat={() => {
+                setTotalCheckoutAmount(showtime.price_amount || 450);
+                setShowSnackModal(true);
+              }}
               isHolding={isHolding}
               showtimeId={showtime.id}
             />
@@ -360,12 +372,28 @@ export function App() {
         )}
       </main>
 
+      {/* Snack Builder Modal */}
+      {showSnackModal && selectedSeatCode && (
+        <SnackModal
+          seatCode={selectedSeatCode}
+          ticketPrice={showtime?.price_amount || 450}
+          onClose={() => setShowSnackModal(false)}
+          onConfirmSnacks={(chosenSnacks, finalAmount) => {
+            setSelectedSnacks(chosenSnacks);
+            setTotalCheckoutAmount(finalAmount);
+            setShowSnackModal(false);
+            setShowPaymentModal(true);
+          }}
+        />
+      )}
+
       {/* Payment Modal */}
       {showPaymentModal && heldBookingRef && selectedSeatCode && (
         <PaymentModal
           bookingRef={heldBookingRef}
           seatCode={selectedSeatCode}
-          amount={showtime?.price_amount || 450}
+          amount={totalCheckoutAmount}
+          selectedSnacks={selectedSnacks}
           onClose={() => setShowPaymentModal(false)}
           onSuccess={(ref) => {
             const currentSeat = selectedSeatCode;
@@ -390,7 +418,12 @@ export function App() {
       {confirmedBookingRef && (
         <TicketReceiptModal
           bookingRef={confirmedBookingRef}
-          onClose={() => setConfirmedBookingRef(null)}
+          selectedSnacks={selectedSnacks}
+          totalAmountPaid={totalCheckoutAmount}
+          onClose={() => {
+            setConfirmedBookingRef(null);
+            setSelectedSnacks([]);
+          }}
         />
       )}
 

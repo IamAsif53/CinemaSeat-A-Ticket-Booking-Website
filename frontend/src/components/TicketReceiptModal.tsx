@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { Ticket, CheckCircle2, Download, Sparkles, X, Smartphone } from 'lucide-react';
+import { Ticket, CheckCircle2, Download, Sparkles, X, Smartphone, ShoppingBag } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import axios from 'axios';
-import { Booking } from '../types';
+import { Booking, SnackItem } from '../types';
 
 interface TicketReceiptModalProps {
   bookingRef: string;
+  selectedSnacks?: SnackItem[];
+  totalAmountPaid?: number;
   onClose: () => void;
 }
 
-export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({ bookingRef, onClose }) => {
+export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({
+  bookingRef,
+  selectedSnacks = [],
+  totalAmountPaid,
+  onClose
+}) => {
   const [booking, setBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
@@ -38,18 +45,20 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({ bookingR
         seat_code: 'C5',
         user_phone: '01712345678',
         status: 'CONFIRMED',
-        amount: 450,
+        amount: totalAmountPaid || 450,
         booking_ref: bookingRef,
         created_at: new Date().toISOString(),
         movie_title: 'Spider-Man: Brand New Day',
-        screen_name: 'Grand Hall IMAX 1'
+        screen_name: 'Grand Hall IMAX 1',
+        snacks: selectedSnacks
       });
     };
 
     fetchBooking();
-  }, [bookingRef]);
+  }, [bookingRef, totalAmountPaid, selectedSnacks]);
 
-  const qrData = encodeURIComponent(`CINEMASEAT-TICKET|REF:${bookingRef}|SEAT:${booking?.seat_code || 'C5'}|STATUS:CONFIRMED`);
+  const displayAmount = totalAmountPaid || booking?.amount || 450;
+  const qrData = encodeURIComponent(`CINEMASEAT-TICKET|REF:${bookingRef}|SEAT:${booking?.seat_code || 'C5'}|SNACKS:${selectedSnacks.length}|STATUS:CONFIRMED`);
   const realQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrData}&color=0f172a&bgcolor=ffffff`;
 
   return (
@@ -70,7 +79,7 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({ bookingR
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <h3 className="text-2xl font-extrabold text-white tracking-tight">Booking Confirmed!</h3>
-          <p className="text-xs text-emerald-400 font-semibold">Your digital ticket is ready</p>
+          <p className="text-xs text-emerald-400 font-semibold">Your digital ticket & snack pass are ready</p>
         </div>
 
         {booking ? (
@@ -93,10 +102,25 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({ bookingR
                   <span className="font-mono text-gray-200 font-semibold text-[11px] truncate block">{booking.booking_ref}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 block text-[10px] uppercase font-bold">Amount Paid</span>
-                  <span className="text-emerald-400 font-bold">BDT {booking.amount}</span>
+                  <span className="text-gray-500 block text-[10px] uppercase font-bold">Total Paid</span>
+                  <span className="text-emerald-400 font-bold">BDT {displayAmount}</span>
                 </div>
               </div>
+
+              {/* Concessions Section if any */}
+              {selectedSnacks && selectedSnacks.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-800 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1">
+                    <ShoppingBag className="w-3 h-3" />
+                    <span>Concessions Counter Pickup:</span>
+                  </span>
+                  {selectedSnacks.map(s => (
+                    <p key={s.id} className="text-[10px] text-gray-300 font-medium">
+                      • {s.name} (x{s.quantity})
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {/* REAL SCANNABLE QR CODE */}
               <div className="mt-4 pt-4 border-t border-dashed border-gray-700 flex flex-col items-center">
@@ -109,7 +133,7 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({ bookingR
                 </div>
                 <span className="text-[10px] text-gray-300 font-bold flex items-center gap-1">
                   <Smartphone className="w-3 h-3 text-emerald-400" />
-                  <span>Scan with phone camera to verify ticket</span>
+                  <span>Scan at entry gate & snack counter</span>
                 </span>
               </div>
             </div>
