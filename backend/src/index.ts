@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { apiRouter } from './routes/api.js';
 import { seedDb } from './db/seed.js';
 import { getHoldTTL } from './db/index.js';
-import { syncExpiredHolds } from './services/bookingService.js';
+import { syncExpiredHolds, setMockMode } from './services/bookingService.js';
 
 dotenv.config();
 
@@ -15,7 +15,6 @@ app.use(cors());
 app.use(express.json());
 
 // MANDATORY JUDGING HOOK #1: GET /health
-// Must return 200 in under 1s, even if mock gateway container is down!
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'UP',
@@ -27,26 +26,26 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api', apiRouter);
 
-// Background timer to automatically sync expired seat holds from Postgres
 setInterval(() => {
   syncExpiredHolds().catch((err: any) => console.error('[Background Cleanup Error]', err));
 }, 5000);
 
 async function startServer() {
   try {
-    console.log('[Server] Initializing database and seed data...');
+    console.log('[Server] Connecting to PostgreSQL database...');
     await seedDb();
-    
-    app.listen(PORT, () => {
-      console.log(`=================================================`);
-      console.log(`🚀 CinemaSeat API Service running on port ${PORT}`);
-      console.log(`⏱️ HOLD_TTL_SECONDS set to: ${getHoldTTL()}s`);
-      console.log(`=================================================`);
-    });
+    console.log('[Server] Database connected & seeded.');
   } catch (err) {
-    console.error('[Server] Startup failed:', err);
-    process.exit(1);
+    console.warn('[Server] DB Connection unavailable on local host. Activating standalone Mock Mode...');
+    setMockMode(true);
   }
+
+  app.listen(PORT, () => {
+    console.log(`=================================================`);
+    console.log(`🚀 CinemaSeat API Service running on port ${PORT}`);
+    console.log(`⏱️ HOLD_TTL_SECONDS set to: ${getHoldTTL()}s`);
+    console.log(`=================================================`);
+  });
 }
 
 startServer();

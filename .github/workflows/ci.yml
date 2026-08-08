@@ -1,0 +1,80 @@
+name: CinemaSeat CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint-and-build:
+    name: TypeCheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/checkout@v4
+        with:
+          node-version: '22'
+
+      - name: Build Backend TypeScript
+        run: |
+          cd backend
+          npm ci
+          npm run build
+
+      - name: Build Frontend React App
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+  docker-integration-test:
+    name: Docker Compose & Scenario Integration Tests
+    needs: lint-and-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Spin up CinemaSeat Stack with Docker Compose
+        run: |
+          docker compose up -d --build
+          docker compose ps
+
+      - name: Wait for API /health hook
+        run: |
+          echo "Waiting for http://localhost/health..."
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP 200 OK)"
+              exit 0
+            fi
+            echo "Attempt $i: Status is $STATUS, retrying in 2s..."
+            sleep 2
+          done
+          echo "Error: /health check timed out!"
+          docker compose logs
+          exit 1
+
+      - name: Run Scenario A Test (100 Concurrent Buyers, 1 Seat)
+        run: |
+          npm ci
+          TARGET_URL=http://localhost node scripts/scenario-a.js
+
+      - name: Run Scenario B Test (Abandoned Hold Expiration)
+        run: |
+          TARGET_URL=http://localhost node scripts/scenario-b.js
+
+      - name: Shutdown Docker Compose
+        if: always()
+        run: |
+          docker compose down -v

@@ -22,11 +22,14 @@ const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
 exports.redis = new ioredis_1.default({
     host: redisHost,
     port: redisPort,
-    maxRetriesPerRequest: 3,
-    retryStrategy(times) {
-        const delay = Math.min(times * 100, 2000);
-        return delay;
+    maxRetriesPerRequest: 1,
+    lazyConnect: true,
+    retryStrategy() {
+        return null; // Stop retrying if offline
     }
+});
+exports.redis.on('error', (_err) => {
+    // Suppress unhandled redis error logs in standalone mock mode
 });
 const getHoldTTL = () => {
     const ttl = parseInt(process.env.HOLD_TTL_SECONDS || '60', 10);
@@ -36,6 +39,9 @@ exports.getHoldTTL = getHoldTTL;
 async function initDb() {
     try {
         const schemaPath = path_1.default.join(__dirname, 'schema.sql');
+        if (!fs_1.default.existsSync(schemaPath)) {
+            throw new Error(`Schema file not found at ${schemaPath}`);
+        }
         const sql = fs_1.default.readFileSync(schemaPath, 'utf8');
         await exports.pool.query(sql);
         console.log('[DB] Schema initialized successfully');

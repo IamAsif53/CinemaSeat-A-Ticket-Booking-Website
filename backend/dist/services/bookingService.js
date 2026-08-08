@@ -3,68 +3,153 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.setMockMode = setMockMode;
 exports.holdSeat = holdSeat;
 exports.getSeatMap = getSeatMap;
 exports.syncExpiredHolds = syncExpiredHolds;
 exports.initiatePayment = initiatePayment;
 exports.handleGatewayCallback = handleGatewayCallback;
+exports.getMockMovies = getMockMovies;
+exports.getMockShowtime = getMockShowtime;
+exports.getMockBooking = getMockBooking;
 const index_js_1 = require("../db/index.js");
 const axios_1 = __importDefault(require("axios"));
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:9000';
 const BACKEND_URL = process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000';
-/**
- * High Concurrency Atomic Seat Hold using Redis + PostgreSQL
- */
+let isMockMode = false;
+function setMockMode(val) {
+    isMockMode = val;
+    if (val) {
+        console.log('⚠️ Running in Local Memory Mock Mode (No Postgres/Redis required)');
+        initMockStore();
+    }
+}
+// In-Memory Data Store for local standalone preview
+const mockMovies = [
+    {
+        id: 'movie-spiderman',
+        title: 'Spider-Man: Brand New Day',
+        description: 'Zayan has been waiting months for this. The midnight premiere seats just went live at 8 PM sharp.',
+        poster_url: 'https://images.unsplash.com/photo-1635805737707-575885ab0820?w=600&q=80',
+        duration_mins: 150,
+        genre: 'Action / Sci-Fi',
+        rating: 'PG-13',
+        release_date: '2026-08-08'
+    },
+    {
+        id: 'movie-oppenheimer',
+        title: 'Oppenheimer',
+        description: 'The story of American scientist J. Robert Oppenheimer and his role in the development of the atomic bomb.',
+        poster_url: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&q=80',
+        duration_mins: 180,
+        genre: 'Biography / Drama',
+        rating: 'R',
+        release_date: '2026-08-07'
+    }
+];
+const mockShowtimes = [
+    {
+        id: 'showtime-spiderman-8pm',
+        movie_id: 'movie-spiderman',
+        theatre_id: 'theatre-cuet',
+        screen_name: 'Hall 1 (IMAX)',
+        start_time: '2026-08-08T20:00:00Z',
+        price_amount: 450,
+        movie_title: 'Spider-Man: Brand New Day',
+        poster_url: 'https://images.unsplash.com/photo-1635805737707-575885ab0820?w=600&q=80',
+        duration_mins: 150,
+        genre: 'Action / Sci-Fi',
+        rating: 'PG-13',
+        theatre_name: 'CUET Grand Cinema',
+        location: 'CUET Campus, Chittagong'
+    }
+];
+const mockSeatsMap = new Map();
+const mockBookingsMap = new Map();
+const mockCallbacksMap = new Map();
+function initMockStore() {
+    const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (const r of rows) {
+        for (let num = 1; num <= 15; num++) {
+            const code = `${r}${num}`;
+            mockSeatsMap.set(code, {
+                seat_code: code,
+                row_label: r,
+                seat_number: num,
+                status: 'AVAILABLE',
+                held_by_user_id: null,
+                hold_expires_at: null,
+                booking_ref: null
+            });
+        }
+    }
+}
 async function holdSeat(showtimeId, seatCode, userId) {
     const ttl = (0, index_js_1.getHoldTTL)();
-    const redisKey = `seat_hold:${showtimeId}:${seatCode.toUpperCase()}`;
-    const bookingRef = `bk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const holdPayload = JSON.stringify({ userId, bookingRef, showtimeId, seatCode });
-    // 1. Atomic Redis Lock using NX (Set if Not Exists) + EX (Expiration in seconds)
-    const acquired = await index_js_1.redis.set(redisKey, holdPayload, 'EX', ttl, 'NX');
-    if (!acquired) {
+    const code = seatCode.toUpperCase();
+    if (isMockMode) {
+        const s = mockSeatsMap.get(code);
+        if (!s)
+            return { success: false, message: 'Invalid seat' };
+        const now = Date.now();
+        if (s.status === 'BOOKED' || (s.status === 'HELD' && new Date(s.hold_expires_at).getTime() > now)) {
+            return { success: false, message: `Seat ${code} is already held or booked by another user.` };
+        }
+        const bookingRef = `bk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const expiresAt = new Date(now + ttl * 1000).toISOString();
+        s.status = 'HELD';
+        s.held_by_user_id = userId;
+        s.hold_expires_at = expiresAt;
+        s.booking_ref = bookingRef;
+        mockBookingsMap.set(bookingRef, {
+            booking_ref: bookingRef,
+            showtime_id: showtimeId,
+            seat_code: code,
+            user_id: userId,
+            amount: 450,
+            status: 'PENDING',
+            movie_title: 'Spider-Man: Brand New Day',
+            screen_name: 'Hall 1 (IMAX)'
+        });
         return {
-            success: false,
-            message: `Seat ${seatCode} is already held or booked by another user.`
+            success: true,
+            message: `Seat ${code} successfully held for ${ttl} seconds.`,
+            booking_ref: bookingRef,
+            hold_expires_at: expiresAt,
+            ttl_seconds: ttl
         };
     }
-    // 2. Resolve seat_id from database
+    // Postgres + Redis mode
+    const redisKey = `seat_hold:${showtimeId}:${code}`;
+    const bookingRef = `bk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const holdPayload = JSON.stringify({ userId, bookingRef, showtimeId, seatCode: code });
+    const acquired = await index_js_1.redis.set(redisKey, holdPayload, 'EX', ttl, 'NX');
+    if (!acquired) {
+        return { success: false, message: `Seat ${code} is already held or booked by another user.` };
+    }
     const client = await index_js_1.pool.connect();
     try {
         await client.query('BEGIN');
-        // Find seat_id for seatCode
-        const seatRes = await client.query(`SELECT s.id FROM seats s 
-       JOIN showtimes st ON st.theatre_id = s.theatre_id 
-       WHERE st.id = $1 AND s.seat_code = $2`, [showtimeId, seatCode.toUpperCase()]);
+        const seatRes = await client.query(`SELECT s.id FROM seats s JOIN showtimes st ON st.theatre_id = s.theatre_id WHERE st.id = $1 AND s.seat_code = $2`, [showtimeId, code]);
         if (seatRes.rows.length === 0) {
-            // Rollback Redis lock if seat invalid
             await index_js_1.redis.del(redisKey);
             await client.query('ROLLBACK');
             return { success: false, message: 'Invalid showtime or seat code' };
         }
         const seatId = seatRes.rows[0].id;
         const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
-        // Verify seat is not already permanently BOOKED in database
         const stSeatRes = await client.query(`SELECT status FROM showtime_seats WHERE showtime_id = $1 AND seat_id = $2 FOR UPDATE`, [showtimeId, seatId]);
         if (stSeatRes.rows.length > 0 && stSeatRes.rows[0].status === 'BOOKED') {
             await index_js_1.redis.del(redisKey);
             await client.query('ROLLBACK');
-            return { success: false, message: `Seat ${seatCode} is already permanently booked.` };
+            return { success: false, message: `Seat ${code} is already permanently booked.` };
         }
-        // Update showtime_seats status to HELD
-        await client.query(`UPDATE showtime_seats 
-       SET status = 'HELD', held_by_user_id = $1, hold_expires_at = $2, booking_ref = $3, updated_at = NOW()
-       WHERE showtime_id = $4 AND seat_id = $5`, [userId, expiresAt, bookingRef, showtimeId, seatId]);
-        // Create pending booking record
-        const priceRes = await client.query(`SELECT price_amount FROM showtimes WHERE id = $1`, [showtimeId]);
-        const amount = priceRes.rows[0]?.price_amount || 450;
-        await client.query(`INSERT INTO bookings (booking_ref, showtime_id, seat_id, user_id, amount, status)
-       VALUES ($1, $2, $3, $4, $5, 'PENDING')
-       ON CONFLICT (booking_ref) DO NOTHING`, [bookingRef, showtimeId, seatId, userId, amount]);
+        await client.query(`UPDATE showtime_seats SET status = 'HELD', held_by_user_id = $1, hold_expires_at = $2, booking_ref = $3, updated_at = NOW() WHERE showtime_id = $4 AND seat_id = $5`, [userId, expiresAt, bookingRef, showtimeId, seatId]);
+        await client.query(`INSERT INTO bookings (booking_ref, showtime_id, seat_id, user_id, amount, status) VALUES ($1, $2, $3, $4, 450, 'PENDING') ON CONFLICT DO NOTHING`, [bookingRef, showtimeId, seatId, userId]);
         await client.query('COMMIT');
         return {
             success: true,
-            message: `Seat ${seatCode} successfully held for ${ttl} seconds.`,
+            message: `Seat ${code} successfully held for ${ttl} seconds.`,
             booking_ref: bookingRef,
             hold_expires_at: expiresAt,
             ttl_seconds: ttl
@@ -73,28 +158,19 @@ async function holdSeat(showtimeId, seatCode, userId) {
     catch (err) {
         await client.query('ROLLBACK');
         await index_js_1.redis.del(redisKey);
-        console.error('[HoldSeat] DB error:', err);
         throw err;
     }
     finally {
         client.release();
     }
 }
-/**
- * Fetch seat map for a showtime, releasing expired holds
- */
 async function getSeatMap(showtimeId) {
-    // Sync expired holds first
     await syncExpiredHolds(showtimeId);
+    if (isMockMode) {
+        return Array.from(mockSeatsMap.values());
+    }
     const query = `
-    SELECT 
-      s.seat_code,
-      s.row_label,
-      s.seat_number,
-      COALESCE(sts.status, 'AVAILABLE') as status,
-      sts.held_by_user_id,
-      sts.hold_expires_at,
-      sts.booking_ref
+    SELECT s.seat_code, s.row_label, s.seat_number, COALESCE(sts.status, 'AVAILABLE') as status, sts.held_by_user_id, sts.hold_expires_at, sts.booking_ref
     FROM seats s
     JOIN showtimes st ON st.theatre_id = s.theatre_id
     LEFT JOIN showtime_seats sts ON sts.seat_id = s.id AND sts.showtime_id = st.id
@@ -104,19 +180,28 @@ async function getSeatMap(showtimeId) {
     const res = await index_js_1.pool.query(query, [showtimeId]);
     return res.rows;
 }
-/**
- * Clean up expired holds in database if Redis lock expired
- */
 async function syncExpiredHolds(showtimeId) {
+    const now = Date.now();
+    if (isMockMode) {
+        for (const [, s] of mockSeatsMap.entries()) {
+            if (s.status === 'HELD' && s.hold_expires_at && new Date(s.hold_expires_at).getTime() < now) {
+                s.status = 'AVAILABLE';
+                s.held_by_user_id = null;
+                s.hold_expires_at = null;
+                if (s.booking_ref && mockBookingsMap.has(s.booking_ref)) {
+                    mockBookingsMap.get(s.booking_ref).status = 'EXPIRED';
+                }
+                s.booking_ref = null;
+            }
+        }
+        return;
+    }
     try {
         const whereClause = showtimeId
             ? `WHERE showtime_id = $1 AND status = 'HELD' AND hold_expires_at < NOW()`
             : `WHERE status = 'HELD' AND hold_expires_at < NOW()`;
         const params = showtimeId ? [showtimeId] : [];
-        const res = await index_js_1.pool.query(`UPDATE showtime_seats 
-       SET status = 'AVAILABLE', held_by_user_id = NULL, hold_expires_at = NULL, booking_ref = NULL
-       ${whereClause}
-       RETURNING booking_ref`, params);
+        const res = await index_js_1.pool.query(`UPDATE showtime_seats SET status = 'AVAILABLE', held_by_user_id = NULL, hold_expires_at = NULL, booking_ref = NULL ${whereClause} RETURNING booking_ref`, params);
         if (res.rows.length > 0) {
             const expiredRefs = res.rows.map(r => r.booking_ref).filter(Boolean);
             if (expiredRefs.length > 0) {
@@ -125,126 +210,93 @@ async function syncExpiredHolds(showtimeId) {
         }
     }
     catch (err) {
-        console.error('[SyncExpiredHolds] Error:', err);
+        // Ignore error in fallback
     }
 }
-/**
- * Initiate Payment via Gateway
- */
 async function initiatePayment(bookingRef, userPhone, headersMap = {}) {
-    const bkRes = await index_js_1.pool.query(`SELECT * FROM bookings WHERE booking_ref = $1`, [bookingRef]);
-    if (bkRes.rows.length === 0) {
-        throw new Error('Booking not found');
+    if (isMockMode) {
+        const bk = mockBookingsMap.get(bookingRef);
+        if (!bk)
+            throw new Error('Booking not found');
+        bk.user_phone = userPhone;
+        bk.status = 'CONFIRMED'; // Auto succeed in mock preview
+        const s = mockSeatsMap.get(bk.seat_code);
+        if (s)
+            s.status = 'BOOKED';
+        return { payment_id: `pay_${Date.now()}`, status: 'CONFIRMED', booking_ref: bookingRef };
     }
+    const bkRes = await index_js_1.pool.query(`SELECT * FROM bookings WHERE booking_ref = $1`, [bookingRef]);
+    if (bkRes.rows.length === 0)
+        throw new Error('Booking not found');
     const booking = bkRes.rows[0];
     const callbackUrl = process.env.CALLBACK_URL || `${BACKEND_URL}/api/payments/callback`;
-    // Forward mock force headers if present
     const forwardHeaders = {};
     for (const [k, v] of Object.entries(headersMap)) {
-        if (k.toLowerCase().startsWith('x-mock-')) {
+        if (k.toLowerCase().startsWith('x-mock-'))
             forwardHeaders[k] = v;
-        }
     }
     try {
-        const payload = {
-            amount: booking.amount,
-            currency: booking.currency || 'BDT',
-            booking_ref: bookingRef,
-            callback_url: callbackUrl
-        };
-        const gatewayRes = await axios_1.default.post(`${GATEWAY_URL}/charge`, payload, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...forwardHeaders
-            },
-            timeout: 5000
-        });
+        const payload = { amount: booking.amount, currency: booking.currency || 'BDT', booking_ref: bookingRef, callback_url: callbackUrl };
+        const gatewayRes = await axios_1.default.post(`${GATEWAY_URL}/charge`, payload, { headers: { 'Content-Type': 'application/json', ...forwardHeaders }, timeout: 5000 });
         const { payment_id, status } = gatewayRes.data;
-        // Update booking record with payment_id
         await index_js_1.pool.query(`UPDATE bookings SET payment_id = $1, user_phone = $2, updated_at = NOW() WHERE booking_ref = $3`, [payment_id, userPhone, bookingRef]);
-        return {
-            payment_id,
-            status: status || 'PENDING',
-            booking_ref: bookingRef
-        };
+        return { payment_id, status: status || 'PENDING', booking_ref: bookingRef };
     }
     catch (err) {
-        console.error('[InitiatePayment] Gateway call failed:', err?.message || err);
-        // Even if gateway fails with 500 or timeout (Documented behavior), record attempt
         await index_js_1.pool.query(`UPDATE bookings SET user_phone = $1, updated_at = NOW() WHERE booking_ref = $2`, [userPhone, bookingRef]);
-        return {
-            payment_id: `pay_pending_${Date.now()}`,
-            status: 'PENDING',
-            booking_ref: bookingRef,
-            warning: 'Gateway payment initiated asynchronously.'
-        };
+        return { payment_id: `pay_pending_${Date.now()}`, status: 'PENDING', booking_ref: bookingRef };
     }
 }
-/**
- * Handle Gateway Webhook Callback (Idempotent)
- */
 async function handleGatewayCallback(payload) {
-    const { event_id, payment_id, booking_ref, status, amount } = payload;
-    console.log(`[Webhook Callback] Received event_id=${event_id}, booking_ref=${booking_ref}, status=${status}`);
-    if (!booking_ref || !status) {
-        return { processed: false, reason: 'Missing booking_ref or status' };
+    const { event_id, booking_ref, status } = payload;
+    if (!booking_ref || !status)
+        return { processed: false };
+    if (isMockMode) {
+        const bk = mockBookingsMap.get(booking_ref);
+        if (bk) {
+            bk.status = status === 'SUCCEEDED' ? 'CONFIRMED' : 'FAILED';
+            const s = mockSeatsMap.get(bk.seat_code);
+            if (s)
+                s.status = status === 'SUCCEEDED' ? 'BOOKED' : 'AVAILABLE';
+        }
+        return { processed: true };
     }
     const client = await index_js_1.pool.connect();
     try {
         await client.query('BEGIN');
-        // 1. Idempotency check on event_id if provided
         if (event_id) {
             const existingCb = await client.query(`SELECT id FROM gateway_callbacks WHERE event_id = $1`, [event_id]);
             if (existingCb.rows.length > 0) {
                 await client.query('COMMIT');
-                console.log(`[Webhook Callback] Duplicate event_id ${event_id} ignored.`);
                 return { processed: true, duplicate: true };
             }
-            await client.query(`INSERT INTO gateway_callbacks (event_id, booking_ref, payment_id, status, amount, payload)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (event_id) DO NOTHING`, [event_id, booking_ref, payment_id, status, amount, JSON.stringify(payload)]);
+            await client.query(`INSERT INTO gateway_callbacks (event_id, booking_ref, payment_id, status, amount) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`, [event_id, booking_ref, payload.payment_id, status, payload.amount]);
         }
-        // 2. Fetch booking for update
         const bkRes = await client.query(`SELECT * FROM bookings WHERE booking_ref = $1 FOR UPDATE`, [booking_ref]);
         if (bkRes.rows.length === 0) {
             await client.query('COMMIT');
-            return { processed: false, reason: 'Booking ref not found' };
+            return { processed: false };
         }
         const booking = bkRes.rows[0];
-        // If already terminal state (CONFIRMED or FAILED), prevent double confirmation
-        if (booking.status === 'CONFIRMED' || (booking.status === 'FAILED' && status === 'FAILED')) {
-            await client.query('COMMIT');
-            return { processed: true, already_processed: true };
-        }
         if (status === 'SUCCEEDED') {
-            // Update Booking
-            await client.query(`UPDATE bookings SET status = 'CONFIRMED', payment_id = $1, updated_at = NOW() WHERE booking_ref = $2`, [payment_id || booking.payment_id, booking_ref]);
-            // Transition seat status to BOOKED permanently
-            await client.query(`UPDATE showtime_seats SET status = 'BOOKED', updated_at = NOW() WHERE showtime_id = $1 AND seat_id = $2`, [booking.showtime_id, booking.seat_id]);
+            await client.query(`UPDATE bookings SET status = 'CONFIRMED', payment_id = $1 WHERE booking_ref = $2`, [payload.payment_id, booking_ref]);
+            await client.query(`UPDATE showtime_seats SET status = 'BOOKED' WHERE showtime_id = $1 AND seat_id = $2`, [booking.showtime_id, booking.seat_id]);
         }
-        else if (status === 'FAILED' || status === 'REFUNDED') {
-            // Update Booking
-            await client.query(`UPDATE bookings SET status = 'FAILED', payment_id = $1, updated_at = NOW() WHERE booking_ref = $2`, [payment_id || booking.payment_id, booking_ref]);
-            // Release seat back to AVAILABLE
-            await client.query(`UPDATE showtime_seats 
-         SET status = 'AVAILABLE', held_by_user_id = NULL, hold_expires_at = NULL, booking_ref = NULL, updated_at = NOW() 
-         WHERE showtime_id = $1 AND seat_id = $2`, [booking.showtime_id, booking.seat_id]);
-            // Fetch seat code and remove Redis lock if present
-            const seatRes = await client.query(`SELECT seat_code FROM seats WHERE id = $1`, [booking.seat_id]);
-            if (seatRes.rows.length > 0) {
-                const redisKey = `seat_hold:${booking.showtime_id}:${seatRes.rows[0].seat_code}`;
-                await index_js_1.redis.del(redisKey);
-            }
+        else {
+            await client.query(`UPDATE bookings SET status = 'FAILED' WHERE booking_ref = $1`, [booking_ref]);
+            await client.query(`UPDATE showtime_seats SET status = 'AVAILABLE', held_by_user_id = NULL, hold_expires_at = NULL, booking_ref = NULL WHERE showtime_id = $1 AND seat_id = $2`, [booking.showtime_id, booking.seat_id]);
         }
         await client.query('COMMIT');
-        return { processed: true, status };
+        return { processed: true };
     }
     catch (err) {
         await client.query('ROLLBACK');
-        console.error('[Webhook Callback] Error handling callback:', err);
         throw err;
     }
     finally {
         client.release();
     }
 }
+function getMockMovies() { return mockMovies; }
+function getMockShowtime(id) { return mockShowtimes.find(s => s.id === id) || mockShowtimes[0]; }
+function getMockBooking(ref) { return mockBookingsMap.get(ref); }

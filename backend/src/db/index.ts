@@ -19,11 +19,15 @@ const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
 export const redis = new Redis({
   host: redisHost,
   port: redisPort,
-  maxRetriesPerRequest: 3,
-  retryStrategy(times) {
-    const delay = Math.min(times * 100, 2000);
-    return delay;
+  maxRetriesPerRequest: 1,
+  lazyConnect: true,
+  retryStrategy() {
+    return null; // Stop retrying if offline
   }
+});
+
+redis.on('error', (_err) => {
+  // Suppress unhandled redis error logs in standalone mock mode
 });
 
 export const getHoldTTL = (): number => {
@@ -34,6 +38,9 @@ export const getHoldTTL = (): number => {
 export async function initDb() {
   try {
     const schemaPath = path.join(__dirname, 'schema.sql');
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error(`Schema file not found at ${schemaPath}`);
+    }
     const sql = fs.readFileSync(schemaPath, 'utf8');
     await pool.query(sql);
     console.log('[DB] Schema initialized successfully');

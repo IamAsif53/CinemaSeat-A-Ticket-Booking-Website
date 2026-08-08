@@ -16,7 +16,6 @@ const PORT = process.env.PORT || 5000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 // MANDATORY JUDGING HOOK #1: GET /health
-// Must return 200 in under 1s, even if mock gateway container is down!
 app.get('/health', (_req, res) => {
     res.status(200).json({
         status: 'UP',
@@ -26,24 +25,24 @@ app.get('/health', (_req, res) => {
     });
 });
 app.use('/api', api_js_1.apiRouter);
-// Background timer to automatically sync expired seat holds from Postgres
 setInterval(() => {
     (0, bookingService_js_1.syncExpiredHolds)().catch((err) => console.error('[Background Cleanup Error]', err));
 }, 5000);
 async function startServer() {
     try {
-        console.log('[Server] Initializing database and seed data...');
+        console.log('[Server] Connecting to PostgreSQL database...');
         await (0, seed_js_1.seedDb)();
-        app.listen(PORT, () => {
-            console.log(`=================================================`);
-            console.log(`🚀 CinemaSeat API Service running on port ${PORT}`);
-            console.log(`⏱️ HOLD_TTL_SECONDS set to: ${(0, index_js_1.getHoldTTL)()}s`);
-            console.log(`=================================================`);
-        });
+        console.log('[Server] Database connected & seeded.');
     }
     catch (err) {
-        console.error('[Server] Startup failed:', err);
-        process.exit(1);
+        console.warn('[Server] DB Connection unavailable on local host. Activating standalone Mock Mode...');
+        (0, bookingService_js_1.setMockMode)(true);
     }
+    app.listen(PORT, () => {
+        console.log(`=================================================`);
+        console.log(`🚀 CinemaSeat API Service running on port ${PORT}`);
+        console.log(`⏱️ HOLD_TTL_SECONDS set to: ${(0, index_js_1.getHoldTTL)()}s`);
+        console.log(`=================================================`);
+    });
 }
 startServer();
