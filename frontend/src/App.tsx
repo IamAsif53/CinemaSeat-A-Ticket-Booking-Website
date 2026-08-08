@@ -300,11 +300,18 @@ export function App() {
           amount={showtime?.price_amount || 450}
           onClose={() => setShowPaymentModal(false)}
           onSuccess={(ref) => {
+            const currentSeat = selectedSeatCode;
+            if (currentSeat) {
+              setSeats(prev => prev.map(s => s.seat_code === currentSeat ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
+            }
             setShowPaymentModal(false);
             setConfirmedBookingRef(ref);
             setHeldBookingRef(null);
             setSelectedSeatCode(null);
             setHoldExpiresAt(null);
+            if (currentSeat) {
+              setToastMessage({ text: `🎉 Seat ${currentSeat} successfully confirmed & locked!`, type: 'success' });
+            }
           }}
         />
       )}
