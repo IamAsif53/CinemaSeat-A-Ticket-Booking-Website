@@ -1,6 +1,6 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Seat } from '../types';
-import { Lock, CheckCircle2, Flame, Timer, Zap, Eye, BarChart2, XCircle } from 'lucide-react';
+import { Lock, CheckCircle2, Flame, Timer, Zap, Eye, BarChart2, XCircle, HelpCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface SeatMapProps {
@@ -32,6 +32,8 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
 }) => {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [hoveredSeat, setHoveredSeat] = useState<Seat | null>(null);
+  const [pendingHoldSeat, setPendingHoldSeat] = useState<Seat | null>(null);
+
   const [simulatingRush, setSimulatingRush] = useState<boolean>(false);
   const [rushReport, setRushReport] = useState<{
     sent: number;
@@ -63,7 +65,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
     return () => clearInterval(interval);
   }, [holdExpiresAt, onHoldExpired]);
 
-  // Handle In-Browser 100-User Rush Simulation (WOW Feature for Judges)
+  // Handle In-Browser 100-User Rush Simulation
   const handleSimulate100Rush = async () => {
     setSimulatingRush(true);
     setRushReport(null);
@@ -103,7 +105,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
     setSimulatingRush(false);
   };
 
-  // Group seats by row (extracts row letter from row_label OR seat_code[0])
+  // Group seats by row
   const getRowLabel = (seat: Seat) => seat.row_label || (seat.seat_code ? seat.seat_code[0] : 'A');
   const getSeatNumber = (seat: Seat) => seat.seat_number || (seat.seat_code ? parseInt(seat.seat_code.substring(1), 10) : 1);
 
@@ -172,7 +174,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
           </div>
         ) : (
           <div className="h-full border border-dashed border-gray-800 rounded-xl flex items-center justify-center text-xs text-gray-500">
-            Hover over any seat to preview viewing angle & quality
+            Click on any seat to show the Hold Confirmation Dialog
           </div>
         )}
       </div>
@@ -193,7 +195,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
             <span className="text-brand-300 font-semibold">Your Hold</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded bg-gray-800 border border-gray-900 opacity-40"></span>
+            <span className="w-4 h-4 rounded bg-gray-900 border border-gray-900 opacity-40"></span>
             <span className="text-gray-500">Booked</span>
           </div>
         </div>
@@ -207,7 +209,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
         </span>
       </div>
 
-      {/* Seat Grid - Clean Rows & Columns without yellow dots */}
+      {/* Seat Grid */}
       <div className="overflow-x-auto pb-4">
         <div className="min-w-[640px] flex flex-col items-center gap-3">
           {rows.map(row => {
@@ -240,7 +242,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
                       <button
                         key={seat.seat_code}
                         disabled={isBooked || isHeldByOther || isHolding}
-                        onClick={() => onHoldSeat(seat.seat_code)}
+                        onClick={() => setPendingHoldSeat(seat)}
                         onMouseEnter={() => setHoveredSeat(seat)}
                         onMouseLeave={() => setHoveredSeat(null)}
                         className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex flex-col items-center justify-center text-xs transition-all duration-150 relative group font-sans ${bgClass}`}
@@ -259,6 +261,44 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
           })}
         </div>
       </div>
+
+      {/* Confirmation Modal: "Do you want to hold seat X? Yes / No" */}
+      {pendingHoldSeat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="glass-card max-w-sm w-full rounded-2xl p-6 border border-brand-500/40 shadow-2xl text-center space-y-4 relative overflow-hidden">
+            <div className="w-12 h-12 rounded-2xl bg-brand-500/20 text-brand-400 border border-brand-500/30 flex items-center justify-center mx-auto shadow-lg shadow-brand-500/20">
+              <HelpCircle className="w-6 h-6 text-brand-400 animate-pulse" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-white font-sans tracking-tight">Hold Seat {pendingHoldSeat.seat_code}?</h3>
+              <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">
+                Do you want to temporarily hold <strong>Seat {pendingHoldSeat.seat_code}</strong>? You will have 60 seconds to complete payment.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setPendingHoldSeat(null)}
+                className="py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white font-bold text-xs border border-gray-700 transition"
+              >
+                No, Cancel
+              </button>
+
+              <button
+                onClick={() => {
+                  const code = pendingHoldSeat.seat_code;
+                  setPendingHoldSeat(null);
+                  onHoldSeat(code);
+                }}
+                className="py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-extrabold text-xs shadow-lg shadow-brand-500/30 transition transform hover:scale-105 active:scale-95"
+              >
+                Yes, Hold Seat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Footer Bar (Only rendered when hold is active and timeLeft > 0) */}
       {heldBookingRef && timeLeft !== null && timeLeft > 0 && (
