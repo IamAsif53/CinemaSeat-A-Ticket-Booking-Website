@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, MessageSquare, CheckCircle2, AlertTriangle, Send, Sparkles, X, ThumbsUp, User } from 'lucide-react';
+import { Star, MessageSquare, CheckCircle2, AlertTriangle, Send, X } from 'lucide-react';
 import axios from 'axios';
 
 export interface ReviewItem {
@@ -38,7 +38,6 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const [comment, setComment] = useState('');
   
   const [loading, setLoading] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Fetch reviews & rating statistics
@@ -83,7 +82,6 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
       if (res.data.success) {
         setComment('');
-        setToastMsg('🎉 Your review was posted! It now appears at the top of the list.');
 
         // Update local state instantly with new review marked as NEW
         const newRev: ReviewItem = { ...res.data.new_review, isNew: true };
@@ -115,8 +113,8 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
       <div className="glass-panel w-full max-w-2xl max-h-[90vh] rounded-3xl border border-white/10 overflow-hidden flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-5 border-b border-gray-800 flex items-center justify-between shrink-0">
+        {/* Top Header with Prominent Close Controls */}
+        <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
               <Star className="w-5 h-5 fill-amber-400" />
@@ -129,24 +127,18 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             </div>
           </div>
 
-          <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-dark-800 transition">
-            <X className="w-5 h-5" />
+          {/* Prominent Close Button */}
+          <button
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+          >
+            <X className="w-4 h-4 text-rose-400" />
+            <span>Close</span>
           </button>
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
-          {/* Toast Banner */}
-          {toastMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-semibold flex items-center justify-between animate-fade-in">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{toastMsg}</span>
-              </div>
-              <button onClick={() => setToastMsg(null)} className="text-[10px] text-emerald-400 underline">Dismiss</button>
-            </div>
-          )}
-
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
           {/* Rating Summary Box */}
           <div className="p-5 rounded-2xl bg-dark-800/90 border border-gray-800 flex flex-col sm:flex-row items-center gap-6">
             {/* Big Score Card */}
@@ -183,7 +175,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             </div>
           </div>
 
-          {/* Form: Add a Review & Give Rating */}
+          {/* Form: Write Your Review */}
           <div className="p-5 rounded-2xl glass-card border border-brand-500/30 space-y-4">
             <h4 className="font-extrabold text-white text-sm flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-brand-400" />

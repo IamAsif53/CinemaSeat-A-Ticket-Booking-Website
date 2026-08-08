@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Movie, Showtime } from '../types';
-import { Clock, Calendar, MapPin, Sparkles, ChevronRight, Star, MessageSquare } from 'lucide-react';
+import { Clock, Calendar, MapPin, Sparkles, Star, MessageSquare } from 'lucide-react';
 import { ReviewModal } from './ReviewModal';
 import axios from 'axios';
 
@@ -110,13 +110,10 @@ export const MovieHeader: React.FC<MovieHeaderProps> = ({
             </div>
           </div>
 
-          {/* Review & Rating Action Buttons Bar */}
+          {/* Separate Rating Badge (STATIC) and Write a Review Button */}
           <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-3">
-            {/* Button 1: See Reviews */}
-            <button
-              onClick={() => setShowReviewModal(true)}
-              className="px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs border border-amber-500/40 flex items-center gap-2 transition shadow-md hover:scale-105"
-            >
+            {/* STATIC Rating Badge — Information Only (Does NOT open modal) */}
+            <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-2">
               <div className="flex items-center gap-0.5 text-amber-400">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <Star
@@ -125,16 +122,15 @@ export const MovieHeader: React.FC<MovieHeaderProps> = ({
                   />
                 ))}
               </div>
-              <span>★ {avgRating} / 5.0 ({totalReviews} Reviews)</span>
-              <ChevronRight className="w-4 h-4 text-amber-400" />
-            </button>
+              <span>★ {avgRating} / 5.0 ({totalReviews} Audience Ratings)</span>
+            </div>
 
-            {/* Button 2: Write a Review */}
+            {/* Write a Review Button — ONLY this button opens the review form */}
             <button
               onClick={() => setShowReviewModal(true)}
-              className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-200 hover:text-white font-bold text-xs border border-gray-700 flex items-center gap-2 transition hover:border-brand-500/50"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center gap-2 transition transform hover:scale-105"
             >
-              <MessageSquare className="w-4 h-4 text-brand-400" />
+              <MessageSquare className="w-4 h-4" />
               <span>Write a Review</span>
             </button>
           </div>
