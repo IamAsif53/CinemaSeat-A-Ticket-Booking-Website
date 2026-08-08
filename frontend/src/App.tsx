@@ -6,7 +6,7 @@ import { SeatMap } from './components/SeatMap';
 import { PaymentModal } from './components/PaymentModal';
 import { TicketReceiptModal } from './components/TicketReceiptModal';
 import { Movie, Showtime, Seat } from './types';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 export function App() {
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -31,7 +31,7 @@ export function App() {
         const mRes = await axios.get('/api/movies');
         setMovies(mRes.data);
         if (mRes.data.length > 0) {
-          setSelectedMovie(mRes.data[0]); // Spider-Man Premiere
+          setSelectedMovie(mRes.data[0]);
         }
 
         const stRes = await axios.get('/api/showtimes/showtime-spiderman-8pm');
@@ -63,6 +63,15 @@ export function App() {
     return () => clearInterval(interval);
   }, [showtime]);
 
+  // Handle Movie Selection Change
+  const handleSelectMovie = (movie: Movie) => {
+    setSelectedMovie(movie);
+    // Reset selected seat hold view
+    setSelectedSeatCode(null);
+    setHeldBookingRef(null);
+    setHoldExpiresAt(null);
+  };
+
   // Handle Seat Hold Request
   const handleHoldSeat = async (seatCode: string) => {
     if (!showtime || isHolding) return;
@@ -82,7 +91,6 @@ export function App() {
         setHoldExpiresAt(res.data.hold_expires_at);
         setToastMessage({ text: `Seat ${seatCode} held successfully!`, type: 'success' });
 
-        // Refresh seats map
         const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
         setSeats(seatsRes.data);
       }
@@ -90,7 +98,6 @@ export function App() {
       const errMsg = err?.response?.data?.message || err?.response?.data?.error || `Failed to hold seat ${seatCode}`;
       setToastMessage({ text: errMsg, type: 'error' });
       
-      // Refresh seat map to show updated status
       if (showtime) {
         const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
         setSeats(seatsRes.data);
@@ -122,9 +129,14 @@ export function App() {
           </div>
         )}
 
-        {/* Movie Header */}
+        {/* Movie Header with Selector */}
         {selectedMovie && showtime && (
-          <MovieHeader movie={selectedMovie} showtime={showtime} />
+          <MovieHeader
+            movies={movies}
+            selectedMovie={selectedMovie}
+            showtime={showtime}
+            onSelectMovie={handleSelectMovie}
+          />
         )}
 
         {/* Live Seat Map */}
@@ -138,6 +150,7 @@ export function App() {
             onHoldSeat={handleHoldSeat}
             onPaySeat={() => setShowPaymentModal(true)}
             isHolding={isHolding}
+            showtimeId={showtime.id}
           />
         )}
       </main>
