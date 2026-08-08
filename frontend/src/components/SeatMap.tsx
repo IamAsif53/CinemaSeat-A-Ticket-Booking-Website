@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Seat } from '../types';
 import { Lock, CheckCircle2, Flame, Timer, Zap, Eye, BarChart2, XCircle } from 'lucide-react';
 import axios from 'axios';
@@ -16,7 +16,7 @@ interface SeatMapProps {
   showtimeId: string;
 }
 
-export const SeatMap: React.FC<SeatMapProps> = ({
+export const SeatMap: React.FC<SeatMapProps> = memo(({
   seats,
   currentUserId,
   selectedSeatCode,
@@ -123,7 +123,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
           disabled={simulatingRush}
           className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-brand-600 hover:from-amber-500 hover:to-brand-500 text-white font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition transform hover:scale-105 active:scale-95 disabled:opacity-50"
         >
-          <Zap className="w-4 h-4 animate-bounce text-amber-300" />
+          <Zap className="w-4 h-4 text-amber-300" />
           <span>{simulatingRush ? 'Firing 100 Requests...' : '⚡ Simulate 100 Concurrent Buyers (Seat F12)'}</span>
         </button>
       </div>
@@ -148,19 +148,25 @@ export const SeatMap: React.FC<SeatMapProps> = ({
         </div>
       )}
 
-      {/* Seat Hover Preview Tooltip */}
-      {hoveredSeat && (
-        <div className="mb-6 p-3 rounded-xl bg-dark-800/90 border border-brand-500/30 text-xs flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2">
-            <Eye className="w-4 h-4 text-brand-400" />
-            <span className="font-bold text-white">Seat {hoveredSeat.seat_code}</span>
-            <span className="text-gray-400">— {getSeatViewQuality(hoveredSeat.seat_code).desc}</span>
+      {/* Seat Hover Preview Tooltip Box (Fixed Height Container to prevent layout shift) */}
+      <div className="h-12 mb-4">
+        {hoveredSeat ? (
+          <div className="h-full p-3 rounded-xl bg-dark-800/90 border border-brand-500/30 text-xs flex items-center justify-between transition-all duration-200">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-brand-400" />
+              <span className="font-bold text-white">Seat {hoveredSeat.seat_code}</span>
+              <span className="text-gray-400">— {getSeatViewQuality(hoveredSeat.seat_code).desc}</span>
+            </div>
+            <span className="px-2 py-0.5 rounded bg-brand-600/30 text-brand-300 font-bold text-[10px]">
+              {getSeatViewQuality(hoveredSeat.seat_code).tag}
+            </span>
           </div>
-          <span className="px-2 py-0.5 rounded bg-brand-600/30 text-brand-300 font-bold text-[10px]">
-            {getSeatViewQuality(hoveredSeat.seat_code).tag}
-          </span>
-        </div>
-      )}
+        ) : (
+          <div className="h-full border border-dashed border-gray-800 rounded-xl flex items-center justify-center text-xs text-gray-500">
+            Hover over any seat to preview viewing angle & quality
+          </div>
+        )}
+      </div>
 
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8 text-xs">
@@ -220,7 +226,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
                     if (isBooked) {
                       bgClass = 'bg-gray-900 border-gray-900 text-gray-600 opacity-30 cursor-not-allowed';
                     } else if (isHeldByMe) {
-                      bgClass = 'bg-brand-600 border-brand-400 text-white shadow-lg shadow-brand-500/40 animate-pulse font-bold';
+                      bgClass = 'bg-brand-600 border-brand-400 text-white shadow-lg shadow-brand-500/40 font-bold';
                     } else if (isHeldByOther) {
                       bgClass = 'bg-amber-950/60 border-amber-600/60 text-amber-400 cursor-not-allowed';
                     } else if (isSelected) {
@@ -234,11 +240,11 @@ export const SeatMap: React.FC<SeatMapProps> = ({
                         onClick={() => onHoldSeat(seat.seat_code)}
                         onMouseEnter={() => setHoveredSeat(seat)}
                         onMouseLeave={() => setHoveredSeat(null)}
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg border flex flex-col items-center justify-center text-xs transition-all duration-200 relative group ${bgClass}`}
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg border flex flex-col items-center justify-center text-xs transition-all duration-150 relative group ${bgClass}`}
                       >
                         <span className="font-semibold">{seat.seat_code}</span>
                         {isF12 && !isBooked && (
-                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+                          <span className="absolute -top-1 -right-1 w-2 rounded-full bg-amber-400"></span>
                         )}
                         {isHeldByOther && (
                           <Lock className="w-2.5 h-2.5 text-amber-400 absolute bottom-0.5" />
@@ -259,7 +265,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
         <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-brand-950/80 to-dark-800 border border-brand-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-brand-600/20 text-brand-400 border border-brand-500/30">
-              <Timer className="w-5 h-5 animate-spin" />
+              <Timer className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -295,4 +301,4 @@ export const SeatMap: React.FC<SeatMapProps> = ({
       )}
     </div>
   );
-};
+});

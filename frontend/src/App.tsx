@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
@@ -15,9 +15,12 @@ export function App() {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [showtime, setShowtime] = useState<Showtime | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const seatsRef = useRef<Seat[]>([]);
+  seatsRef.current = seats;
+
   const [currentUserId] = useState<string>(() => `user_${Math.floor(Math.random() * 10000)}`);
-  
   const [viewMode, setViewMode] = useState<'CATALOG' | 'BOOKING'>('CATALOG');
+  
   const [selectedSeatCode, setSelectedSeatCode] = useState<string | null>(null);
   const [heldBookingRef, setHeldBookingRef] = useState<string | null>(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
@@ -29,55 +32,73 @@ export function App() {
 
   // Load Movies & Initial Showtime
   useEffect(() => {
+    let isMounted = true;
     const init = async () => {
       try {
         const mRes = await axios.get('/api/movies');
+        if (!isMounted) return;
         setMovies(mRes.data);
         if (mRes.data.length > 0) {
           setSelectedMovie(mRes.data[0]);
         }
 
         const stRes = await axios.get('/api/showtimes/showtime-spiderman-8pm');
+        if (!isMounted) return;
         setShowtime(stRes.data);
 
         const seatsRes = await axios.get('/api/showtimes/showtime-spiderman-8pm/seats');
+        if (!isMounted) return;
         setSeats(seatsRes.data);
       } catch (err) {
         console.error('Failed to load initial data:', err);
       }
     };
     init();
+    return () => { isMounted = false; };
   }, []);
 
-  // Poll Seat Map every 3 seconds for live concurrency updates when in BOOKING view
+  // SMART POLLING: Only update seats state if seat data actually changed to prevent DOM flickering/glitching!
   useEffect(() => {
     if (!showtime || viewMode !== 'BOOKING') return;
 
+    let isMounted = true;
     const fetchSeats = async () => {
       try {
         const res = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-        setSeats(res.data);
+        if (!isMounted) return;
+
+        const newSeats: Seat[] = res.data;
+        const currentSeatsStr = JSON.stringify(seatsRef.current);
+        const newSeatsStr = JSON.stringify(newSeats);
+
+        // Only trigger re-render if seats data changed
+        if (currentSeatsStr !== newSeatsStr) {
+          setSeats(newSeats);
+        }
       } catch (err) {
         console.error('Error fetching seat map:', err);
       }
     };
 
     const interval = setInterval(fetchSeats, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [showtime, viewMode]);
 
   // Handle Booking Action on any movie card
-  const handleBookMovieSeats = (movie: Movie) => {
+  const handleBookMovieSeats = useCallback((movie: Movie) => {
     setSelectedMovie(movie);
     setViewMode('BOOKING');
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
   // Handle Seat Hold Request
-  const handleHoldSeat = async (seatCode: string) => {
+  const handleHoldSeat = useCallback(async (seatCode: string) => {
     if (!showtime || isHolding) return;
 
     setIsHolding(true);
@@ -109,10 +130,10 @@ export function App() {
     } finally {
       setIsHolding(false);
     }
-  };
+  }, [showtime, isHolding, currentUserId]);
 
   // Handle Manual Cancel Hold Request
-  const handleCancelHold = async () => {
+  const handleCancelHold = useCallback(async () => {
     if (!heldBookingRef || !showtime) return;
 
     try {
@@ -128,7 +149,7 @@ export function App() {
     } catch (err: any) {
       setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
     }
-  };
+  }, [heldBookingRef, showtime, selectedSeatCode]);
 
   const featuredMovie = movies.find(m => m.id === 'movie-spiderman') || movies[0];
 
