@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Star, MessageSquare, CheckCircle2, AlertTriangle, Send, X } from 'lucide-react';
-import axios from 'axios';
 
 export interface ReviewItem {
   id: string;
@@ -99,53 +98,63 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Fetch reviews & rating statistics
-  const fetchReviews = async () => {
+  // Load reviews & rating statistics safely
+  const fetchReviews = useCallback(() => {
+    const localStoreKey = `cinemaseat_reviews_${movieId}`;
+    let list: ReviewItem[] = [];
+
     try {
-      const res = await axios.get(`/api/movies/${movieId}/reviews`, { timeout: 3000 });
-      if (res.data && res.data.recent_reviews) {
-        setReviews(res.data.recent_reviews || []);
-        setAvgRating(res.data.avg_rating || 4.8);
-        setTotalReviews(res.data.total_reviews || 5);
-        setBreakdown(res.data.breakdown || { 5: 4, 4: 1, 3: 0, 2: 0, 1: 0 });
-        if (onReviewsUpdated) {
-          onReviewsUpdated(res.data.avg_rating, res.data.total_reviews);
-        }
-        return;
-      }
-    } catch (err) {
-      console.log('Loading review store fallback for Vercel preview...');
+      const savedLocal = localStorage.getItem(localStoreKey);
+      if (savedLocal) list = JSON.parse(savedLocal);
+    } catch {
+      list = [];
     }
 
-    // Load from localStorage or initial dataset
-    const localStoreKey = `cinemaseat_reviews_${movieId}`;
-    const savedLocal = localStorage.getItem(localStoreKey);
-    let list: ReviewItem[] = savedLocal ? JSON.parse(savedLocal) : (INITIAL_MOCK_REVIEWS[movieId] || INITIAL_MOCK_REVIEWS['movie-spiderman']);
-    
-    // Calculate stats
-    const total = list.length;
-    const sum = list.reduce((acc, item) => acc + item.rating, 0);
-    const avg = total > 0 ? parseFloat((sum / total).toFixed(1)) : 5.0;
-    const b: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-    list.forEach(item => { if (b[item.rating] !== undefined) b[item.rating]++; });
+    if (!list || list.length === 0) {
+      list = INITIAL_MOCK_REVIEWS[movieId] || INITIAL_MOCK_REVIEWS['movie-spiderman'] || [];
+    }
 
-    setReviews(list.slice(0, 5));
+    // Ensure all items in list have safe string author_name and valid properties
+    const safeList: ReviewItem[] = list.map((item, idx) => ({
+      id: String(item.id || `rev_${idx}`),
+      movie_id: String(item.movie_id || movieId),
+      author_name: typeof item.author_name === 'string' && item.author_name.trim() ? item.author_name.trim() : 'Anonymous Moviegoer',
+      rating: typeof item.rating === 'number' ? item.rating : 5,
+      comment: typeof item.comment === 'string' ? item.comment : 'Great movie experience!',
+      verified_purchaser: Boolean(item.verified_purchaser),
+      created_at: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
+      isNew: Boolean(item.isNew)
+    }));
+
+    const total = safeList.length;
+    const sum = safeList.reduce((acc, item) => acc + item.rating, 0);
+    const avg = total > 0 ? parseFloat((sum / total).toFixed(1)) : 4.8;
+    const b: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    safeList.forEach(item => {
+      const r = Math.min(5, Math.max(1, Math.round(item.rating)));
+      b[r] = (b[r] || 0) + 1;
+    });
+
+    setReviews(safeList.slice(0, 10));
     setAvgRating(avg);
     setTotalReviews(total);
     setBreakdown(b);
     if (onReviewsUpdated) onReviewsUpdated(avg, total);
-  };
+  }, [movieId, onReviewsUpdated]);
 
   useEffect(() => {
     fetchReviews();
-  }, [movieId]);
+  }, [fetchReviews]);
 
   // Handle Review Submission
-  const handleSubmitReview = async (e: React.FormEvent) => {
+  const handleSubmitReview = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!comment.trim()) {
+    const trimmedComment = typeof comment === 'string' ? comment.trim() : '';
+    const trimmedName = typeof authorName === 'string' ? authorName.trim() : 'Anonymous Moviegoer';
+
+    if (!trimmedComment) {
       setErrorMsg('Please write your review thoughts before submitting.');
       return;
     }
@@ -153,47 +162,30 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
     setLoading(true);
 
     try {
-      const res = await axios.post(`/api/movies/${movieId}/reviews`, {
-        author_name: authorName.trim() || 'Anonymous Moviegoer',
-        rating,
-        comment: comment.trim()
-      }, { timeout: 3000 });
-
-      if (res.data.success) {
-        setComment('');
-
-        // Update local state instantly with new review marked as NEW
-        const newRev: ReviewItem = { ...res.data.new_review, isNew: true };
-        setReviews([newRev, ...res.data.recent_reviews.slice(0, 4)]);
-        setAvgRating(res.data.avg_rating);
-        setTotalReviews(res.data.total_reviews);
-        setLoading(false);
-
-        if (onReviewsUpdated) {
-          onReviewsUpdated(res.data.avg_rating, res.data.total_reviews);
-        }
-        return;
-      }
-    } catch (err: any) {
-      console.log('Backend API offline on Vercel preview, posting review to local preview store...');
-    }
-
-    // Fallback Preview Submission
-    setTimeout(() => {
       const newRev: ReviewItem = {
-        id: `rev_${Date.now()}`,
+        id: `rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         movie_id: movieId,
-        author_name: authorName.trim() || 'Anonymous Moviegoer',
-        rating,
-        comment: comment.trim(),
+        author_name: trimmedName || 'Anonymous Moviegoer',
+        rating: Math.min(5, Math.max(1, rating)),
+        comment: trimmedComment,
         verified_purchaser: true,
         created_at: new Date().toISOString(),
         isNew: true
       };
 
       const localStoreKey = `cinemaseat_reviews_${movieId}`;
-      const savedLocal = localStorage.getItem(localStoreKey);
-      let existingList: ReviewItem[] = savedLocal ? JSON.parse(savedLocal) : (INITIAL_MOCK_REVIEWS[movieId] || INITIAL_MOCK_REVIEWS['movie-spiderman']);
+      let existingList: ReviewItem[] = [];
+      try {
+        const savedLocal = localStorage.getItem(localStoreKey);
+        if (savedLocal) existingList = JSON.parse(savedLocal);
+      } catch {
+        existingList = [];
+      }
+
+      if (!existingList || existingList.length === 0) {
+        existingList = INITIAL_MOCK_REVIEWS[movieId] || INITIAL_MOCK_REVIEWS['movie-spiderman'] || [];
+      }
+
       const updatedList = [newRev, ...existingList];
       localStorage.setItem(localStoreKey, JSON.stringify(updatedList));
 
@@ -201,10 +193,13 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       const sum = updatedList.reduce((acc, item) => acc + item.rating, 0);
       const avg = parseFloat((sum / total).toFixed(1));
       const b: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-      updatedList.forEach(item => { if (b[item.rating] !== undefined) b[item.rating]++; });
+      updatedList.forEach(item => {
+        const r = Math.min(5, Math.max(1, Math.round(item.rating)));
+        b[r] = (b[r] || 0) + 1;
+      });
 
       setComment('');
-      setReviews(updatedList.slice(0, 5));
+      setReviews(updatedList.slice(0, 10));
       setAvgRating(avg);
       setTotalReviews(total);
       setBreakdown(b);
@@ -213,17 +208,24 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       if (onReviewsUpdated) {
         onReviewsUpdated(avg, total);
       }
-    }, 400);
+    } catch (err: any) {
+      setErrorMsg('Failed to post review. Please try again.');
+      setLoading(false);
+    }
   };
 
   // Helper for relative time string
   const getRelativeTime = (isoDate: string) => {
-    const diffMins = Math.floor((Date.now() - new Date(isoDate).getTime()) / (1000 * 60));
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${Math.floor(diffHours / 24)}d ago`;
+    try {
+      const diffMins = Math.floor((Date.now() - new Date(isoDate).getTime()) / (1000 * 60));
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return `${Math.floor(diffHours / 24)}d ago`;
+    } catch {
+      return 'Recently';
+    }
   };
 
   return (
@@ -236,7 +238,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         onClick={(e) => e.stopPropagation()} 
         className="glass-panel w-full max-w-2xl h-[85vh] sm:h-[80vh] max-h-[750px] rounded-3xl border border-white/10 shadow-2xl flex flex-col relative overflow-hidden cursor-default"
       >
-        {/* FIXED MODAL HEADER (Stays locked at top of card, never scrolls away!) */}
+        {/* FIXED MODAL HEADER */}
         <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0 z-20">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
@@ -260,7 +262,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           </button>
         </div>
 
-        {/* SCROLLABLE INNER BODY (Only this area scrolls down!) */}
+        {/* SCROLLABLE INNER BODY */}
         <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
           {/* Rating Summary Box */}
           <div className="p-5 rounded-2xl bg-dark-800/90 border border-gray-800 flex flex-col sm:flex-row items-center gap-6">
@@ -308,7 +310,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             {errorMsg && (
               <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{errorMsg}</span>
+                <span>{String(errorMsg)}</span>
               </div>
             )}
 
@@ -391,61 +393,67 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           {/* List of 5 Most Recent Reviews */}
           <div className="space-y-4 pt-2">
             <h4 className="font-extrabold text-white text-sm flex items-center justify-between">
-              <span>5 Most Recent Audience Reviews</span>
+              <span>Audience Reviews Feed</span>
               <span className="text-xs text-gray-400 font-normal">Real-Time Feed</span>
             </h4>
 
             {reviews.length > 0 ? (
               <div className="space-y-3">
-                {reviews.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className={`p-4 rounded-2xl bg-dark-800/80 border transition-all duration-300 ${
-                      rev.isNew
-                        ? 'border-emerald-500/80 shadow-lg shadow-emerald-500/20 bg-emerald-950/20'
-                        : 'border-gray-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow">
-                          {rev.author_name[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-white text-xs">{rev.author_name}</span>
-                            {rev.verified_purchaser && (
-                              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold border border-emerald-500/30 flex items-center gap-0.5">
-                                <CheckCircle2 className="w-2.5 h-2.5" />
-                                <span>Verified Buyer</span>
-                              </span>
-                            )}
-                            {rev.isNew && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black uppercase tracking-wider animate-pulse">
-                                🔥 NEW
-                              </span>
-                            )}
+                {reviews.map((rev) => {
+                  const authorStr = typeof rev.author_name === 'string' && rev.author_name.trim() ? rev.author_name.trim() : 'Anonymous Moviegoer';
+                  const initialChar = authorStr[0] ? authorStr[0].toUpperCase() : 'A';
+                  const commentStr = typeof rev.comment === 'string' ? rev.comment : 'Great movie!';
+
+                  return (
+                    <div
+                      key={rev.id}
+                      className={`p-4 rounded-2xl bg-dark-800/80 border transition-all duration-300 ${
+                        rev.isNew
+                          ? 'border-emerald-500/80 shadow-lg shadow-emerald-500/20 bg-emerald-950/20'
+                          : 'border-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow">
+                            {initialChar}
                           </div>
-                          <span className="text-[10px] text-gray-400 font-mono">{getRelativeTime(rev.created_at)}</span>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-white text-xs">{authorStr}</span>
+                              {rev.verified_purchaser && (
+                                <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold border border-emerald-500/30 flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  <span>Verified Buyer</span>
+                                </span>
+                              )}
+                              {rev.isNew && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                  🔥 NEW
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-gray-400 font-mono">{getRelativeTime(rev.created_at)}</span>
+                          </div>
+                        </div>
+
+                        {/* Star Rating Display */}
+                        <div className="flex items-center gap-1 text-amber-400">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={`w-3.5 h-3.5 ${s <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-700'}`}
+                            />
+                          ))}
                         </div>
                       </div>
 
-                      {/* Star Rating Display */}
-                      <div className="flex items-center gap-1 text-amber-400">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star
-                            key={s}
-                            className={`w-3.5 h-3.5 ${s <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-700'}`}
-                          />
-                        ))}
-                      </div>
+                      <p className="text-xs text-gray-300 leading-relaxed pl-10">
+                        "{commentStr}"
+                      </p>
                     </div>
-
-                    <p className="text-xs text-gray-300 leading-relaxed pl-10">
-                      "{rev.comment}"
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="p-8 text-center text-xs text-gray-500">
