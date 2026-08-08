@@ -120,20 +120,17 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-lg animate-fade-in">
-      {/* 1. FLOATING FIXED CLOSE BUTTON AT SCREEN TOP RIGHT (Always visible!) */}
-      <button
-        onClick={onClose}
-        className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[110] px-4 py-2.5 sm:px-6 sm:py-3 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-black text-xs sm:text-sm shadow-2xl shadow-rose-600/50 border-2 border-white/40 flex items-center gap-2 transition transform hover:scale-110 active:scale-95 cursor-pointer"
+    <div 
+      onClick={onClose} 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in cursor-pointer"
+    >
+      {/* Main Glassmorphic Modal Box Container */}
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        className="glass-panel w-full max-w-2xl h-[85vh] sm:h-[80vh] max-h-[750px] rounded-3xl border border-white/10 shadow-2xl flex flex-col relative overflow-hidden cursor-default"
       >
-        <X className="w-5 h-5" />
-        <span>CLOSE REVIEWS (ESC)</span>
-      </button>
-
-      {/* Main Modal Box Container */}
-      <div className="glass-panel w-full max-w-2xl h-[85vh] sm:h-[80vh] rounded-3xl border border-white/15 shadow-2xl flex flex-col relative overflow-hidden">
-        {/* Modal Header */}
-        <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0">
+        {/* FIXED MODAL HEADER (Stays locked at top of card, never scrolls away!) */}
+        <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0 z-20">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
               <Star className="w-5 h-5 fill-amber-400" />
@@ -146,16 +143,17 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             </div>
           </div>
 
+          {/* Tiny Sleek Close Button inside top header */}
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-rose-950/80 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/50 text-xs font-bold transition flex items-center gap-1"
+            className="p-2 rounded-xl bg-dark-800 hover:bg-rose-600 text-gray-400 hover:text-white border border-gray-700 transition duration-200 flex items-center justify-center shrink-0"
+            title="Close Reviews (Esc)"
           >
-            <X className="w-4 h-4" />
-            <span>Close</span>
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Scrollable Body Content */}
+        {/* SCROLLABLE INNER BODY (Only this area scrolls down!) */}
         <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
           {/* Rating Summary Box */}
           <div className="p-5 rounded-2xl bg-dark-800/90 border border-gray-800 flex flex-col sm:flex-row items-center gap-6">
@@ -261,14 +259,14 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                 ></textarea>
               </div>
 
-              {/* Form Buttons Bar */}
+              {/* Form Buttons */}
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={onClose}
                   className="px-5 py-3 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 font-bold text-xs border border-gray-700 transition"
                 >
-                  Cancel / Exit
+                  Cancel
                 </button>
 
                 <button
@@ -348,17 +346,6 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               </div>
             )}
           </div>
-        </div>
-
-        {/* Footer Close Bar */}
-        <div className="bg-dark-900/95 backdrop-blur-md p-4 border-t border-gray-800 flex items-center justify-between shrink-0">
-          <span className="text-xs text-gray-400 font-medium">Click red top-right button or press Esc to exit</span>
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg transition"
-          >
-            Close Reviews Window
-          </button>
         </div>
       </div>
     </div>
