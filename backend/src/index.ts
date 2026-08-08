@@ -3,7 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { apiRouter } from './routes/api.js';
 import { seedDb } from './db/seed.js';
-import { syncExpiredHolds, getHoldTTL } from './db/index.js';
+import { getHoldTTL } from './db/index.js';
+import { syncExpiredHolds } from './services/bookingService.js';
 
 dotenv.config();
 
@@ -28,7 +29,7 @@ app.use('/api', apiRouter);
 
 // Background timer to automatically sync expired seat holds from Postgres
 setInterval(() => {
-  syncExpiredHolds().catch(err => console.error('[Background Cleanup Error]', err));
+  syncExpiredHolds().catch((err: any) => console.error('[Background Cleanup Error]', err));
 }, 5000);
 
 async function startServer() {
