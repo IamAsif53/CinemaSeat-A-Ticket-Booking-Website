@@ -120,18 +120,22 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   };
 
   return (
-    <div 
-      onClick={onClose} 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in cursor-pointer"
-    >
-      <div 
-        onClick={(e) => e.stopPropagation()} 
-        className="glass-panel w-full max-w-2xl max-h-[92vh] rounded-3xl border border-white/10 overflow-hidden flex flex-col shadow-2xl relative cursor-default"
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-lg animate-fade-in">
+      {/* 1. FLOATING FIXED CLOSE BUTTON AT SCREEN TOP RIGHT (Always visible!) */}
+      <button
+        onClick={onClose}
+        className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[110] px-4 py-2.5 sm:px-6 sm:py-3 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-black text-xs sm:text-sm shadow-2xl shadow-rose-600/50 border-2 border-white/40 flex items-center gap-2 transition transform hover:scale-110 active:scale-95 cursor-pointer"
       >
-        {/* STICKY TOP HEADER BAR (Always 100% visible regardless of scrolling) */}
-        <div className="sticky top-0 z-30 bg-dark-900/95 backdrop-blur-md p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0 shadow-md">
+        <X className="w-5 h-5" />
+        <span>CLOSE REVIEWS (ESC)</span>
+      </button>
+
+      {/* Main Modal Box Container */}
+      <div className="glass-panel w-full max-w-2xl h-[85vh] sm:h-[80vh] rounded-3xl border border-white/15 shadow-2xl flex flex-col relative overflow-hidden">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
               <Star className="w-5 h-5 fill-amber-400" />
             </div>
             <div>
@@ -142,18 +146,17 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             </div>
           </div>
 
-          {/* Prominent Red-Accent Close Button */}
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/50 text-xs font-black flex items-center gap-1.5 transition shadow-lg shrink-0"
+            className="p-2 rounded-xl bg-rose-950/80 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/50 text-xs font-bold transition flex items-center gap-1"
           >
             <X className="w-4 h-4" />
-            <span>Close Modal</span>
+            <span>Close</span>
           </button>
         </div>
 
-        {/* Scrollable Body */}
-        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
+        {/* Scrollable Body Content */}
+        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
           {/* Rating Summary Box */}
           <div className="p-5 rounded-2xl bg-dark-800/90 border border-gray-800 flex flex-col sm:flex-row items-center gap-6">
             {/* Big Score Card */}
@@ -258,15 +261,25 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                 ></textarea>
               </div>
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-extrabold text-xs shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 transition disabled:opacity-50 min-h-[44px]"
-              >
-                <Send className="w-4 h-4" />
-                <span>{loading ? 'Posting Review...' : 'Post Movie Review'}</span>
-              </button>
+              {/* Form Buttons Bar */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-3 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 font-bold text-xs border border-gray-700 transition"
+                >
+                  Cancel / Exit
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-extrabold text-xs shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 transition disabled:opacity-50 min-h-[44px]"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{loading ? 'Posting Review...' : 'Post Movie Review'}</span>
+                </button>
+              </div>
             </form>
           </div>
 
@@ -337,14 +350,14 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           </div>
         </div>
 
-        {/* STICKY BOTTOM FOOTER BAR WITH CLOSE BUTTON */}
+        {/* Footer Close Bar */}
         <div className="bg-dark-900/95 backdrop-blur-md p-4 border-t border-gray-800 flex items-center justify-between shrink-0">
-          <span className="text-xs text-gray-400 font-medium">Click outside or press Esc to exit</span>
+          <span className="text-xs text-gray-400 font-medium">Click red top-right button or press Esc to exit</span>
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-200 hover:text-white font-bold text-xs border border-gray-700 transition"
+            className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg transition"
           >
-            Close Reviews
+            Close Reviews Window
           </button>
         </div>
       </div>
