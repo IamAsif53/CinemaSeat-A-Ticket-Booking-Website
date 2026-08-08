@@ -1,19 +1,5 @@
 {
-  "buildCommand": "cd frontend && npm install --no-optional && npx vite build",
+  "buildCommand": "cd frontend && npx vite build",
   "outputDirectory": "frontend/dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/health",
-      "destination": "https://cinema-seat-booking.onrender.com/health"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "https://cinema-seat-booking.onrender.com/api/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+  "framework": "vite"
 }

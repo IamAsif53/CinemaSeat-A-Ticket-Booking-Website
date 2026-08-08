@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "cd frontend && npx vite build",
     "test:scenario-a": "node scripts/scenario-a.js",
     "test:scenario-b": "node scripts/scenario-b.js"
   },
