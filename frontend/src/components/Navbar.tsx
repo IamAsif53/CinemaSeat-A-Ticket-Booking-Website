@@ -31,49 +31,50 @@ export const Navbar: React.FC<NavbarProps> = ({ viewMode = 'CATALOG', onBackToCa
 
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-gray-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
         {/* Brand Logo & Back Button */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {viewMode === 'BOOKING' && onBackToCatalog && (
             <button
               onClick={onBackToCatalog}
-              className="p-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-bold flex items-center gap-1.5 transition"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-bold flex items-center gap-1 transition shrink-0"
+              title="Back to Movies"
             >
               <ArrowLeft className="w-4 h-4 text-brand-400" />
-              <span>Back to Movies</span>
+              <span className="hidden xs:inline">Back</span>
             </button>
           )}
 
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 text-white shadow-lg shadow-brand-500/30">
-              <Film className="w-6 h-6 animate-pulse" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 sm:p-2 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 text-white shadow-lg shadow-brand-500/30">
+              <Film className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-brand-400 bg-clip-text text-transparent font-sans">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-brand-400 bg-clip-text text-transparent font-sans">
                   CinemaSeat
                 </span>
-                <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">
+                <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">
                   Phase 2
                 </span>
               </div>
-              <p className="text-xs text-gray-400 font-medium">When Everyone Wants the Same Seat</p>
+              <p className="text-[10px] sm:text-xs text-gray-400 font-medium hidden xs:block">When Everyone Wants the Same Seat</p>
             </div>
           </div>
         </div>
 
         {/* Live Info & Health Indicator */}
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400 bg-dark-800/80 px-3 py-1.5 rounded-lg border border-gray-800">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="hidden md:flex items-center gap-2 text-xs text-gray-400 bg-dark-800/80 px-3 py-1.5 rounded-lg border border-gray-800">
             <Clock className="w-3.5 h-3.5 text-brand-400" />
             <span>8:00 PM Premiere</span>
           </div>
 
-          <div className="flex items-center gap-2 bg-dark-800/80 px-3 py-1.5 rounded-lg border border-gray-800 text-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-dark-800/80 px-2.5 py-1.5 sm:px-3 rounded-lg border border-gray-800 text-[11px] sm:text-xs">
             <Activity className="w-3.5 h-3.5 text-brand-400" />
-            <span className="text-gray-400 hidden xs:inline">System Health:</span>
+            <span className="text-gray-400 hidden md:inline">System Health:</span>
             {healthStatus === 'UP' ? (
-              <span className="flex items-center gap-1.5 font-semibold text-emerald-400">
+              <span className="flex items-center gap-1 font-semibold text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                 200 OK
               </span>
