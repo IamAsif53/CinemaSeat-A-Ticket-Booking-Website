@@ -295,16 +295,6 @@ export function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* System Health / Status Badge */}
-        {!isLiveBackend && (
-          <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-amber-400" />
-              <span><strong>Vercel Multi-Device Live Sync:</strong> Real-time seat locking active across Phone, Laptop & Desktop browsers.</span>
-            </div>
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">PREVIEW READY</span>
-          </div>
-        )}
 
         {/* Toast Alert */}
         {toastMessage && (
