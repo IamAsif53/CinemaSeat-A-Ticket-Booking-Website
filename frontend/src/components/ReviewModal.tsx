@@ -40,6 +40,15 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   // Fetch reviews & rating statistics
   const fetchReviews = async () => {
     try {
@@ -111,12 +120,18 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="glass-panel w-full max-w-2xl max-h-[90vh] rounded-3xl border border-white/10 overflow-hidden flex flex-col shadow-2xl">
-        {/* Top Header with Prominent Close Controls */}
-        <div className="bg-gradient-to-r from-dark-800 to-dark-900 p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0">
+    <div 
+      onClick={onClose} 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in cursor-pointer"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        className="glass-panel w-full max-w-2xl max-h-[92vh] rounded-3xl border border-white/10 overflow-hidden flex flex-col shadow-2xl relative cursor-default"
+      >
+        {/* STICKY TOP HEADER BAR (Always 100% visible regardless of scrolling) */}
+        <div className="sticky top-0 z-30 bg-dark-900/95 backdrop-blur-md p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0 shadow-md">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
               <Star className="w-5 h-5 fill-amber-400" />
             </div>
             <div>
@@ -127,13 +142,13 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             </div>
           </div>
 
-          {/* Prominent Close Button */}
+          {/* Prominent Red-Accent Close Button */}
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+            className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/50 text-xs font-black flex items-center gap-1.5 transition shadow-lg shrink-0"
           >
-            <X className="w-4 h-4 text-rose-400" />
-            <span>Close</span>
+            <X className="w-4 h-4" />
+            <span>Close Modal</span>
           </button>
         </div>
 
@@ -320,6 +335,17 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               </div>
             )}
           </div>
+        </div>
+
+        {/* STICKY BOTTOM FOOTER BAR WITH CLOSE BUTTON */}
+        <div className="bg-dark-900/95 backdrop-blur-md p-4 border-t border-gray-800 flex items-center justify-between shrink-0">
+          <span className="text-xs text-gray-400 font-medium">Click outside or press Esc to exit</span>
+          <button
+            onClick={onClose}
+            className="px-5 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-200 hover:text-white font-bold text-xs border border-gray-700 transition"
+          >
+            Close Reviews
+          </button>
         </div>
       </div>
     </div>
