@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Navbar } from './components/Navbar';
+import { HomePage } from './components/HomePage';
 import { HeroBanner } from './components/HeroBanner';
 import { MovieGrid } from './components/MovieGrid';
 import { MovieHeader } from './components/MovieHeader';
@@ -19,7 +20,7 @@ export function App() {
   seatsRef.current = seats;
 
   const [currentUserId] = useState<string>(() => `user_${Math.floor(Math.random() * 10000)}`);
-  const [viewMode, setViewMode] = useState<'CATALOG' | 'BOOKING'>('CATALOG');
+  const [viewMode, setViewMode] = useState<'HOME' | 'CATALOG' | 'BOOKING'>('HOME');
   
   const [selectedSeatCode, setSelectedSeatCode] = useState<string | null>(null);
   const [heldBookingRef, setHeldBookingRef] = useState<string | null>(null);
@@ -151,7 +152,7 @@ export function App() {
     }
   }, [heldBookingRef, showtime, selectedSeatCode]);
 
-  // Handle Automatic Hold Expiration (Scenario B Requirement)
+  // Handle Automatic Hold Expiration
   const handleHoldExpired = useCallback(async () => {
     if (!selectedSeatCode) return;
     const seatCode = selectedSeatCode;
@@ -176,7 +177,11 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-dark-900 text-gray-100 flex flex-col font-sans">
-      <Navbar viewMode={viewMode} onBackToCatalog={() => setViewMode('CATALOG')} />
+      <Navbar
+        viewMode={viewMode}
+        onNavigateHome={() => { setViewMode('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onNavigateCatalog={() => { setViewMode('CATALOG'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+      />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Toast Alert */}
@@ -196,7 +201,16 @@ export function App() {
           </div>
         )}
 
-        {/* View Mode 1: Catalog View */}
+        {/* View Mode 1: Landing Home Page */}
+        {viewMode === 'HOME' && (
+          <HomePage
+            movies={movies}
+            onExploreMovies={() => { setViewMode('CATALOG'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onQuickBook={handleBookMovieSeats}
+          />
+        )}
+
+        {/* View Mode 2: Catalog View */}
         {viewMode === 'CATALOG' && (
           <div className="space-y-8 animate-fade-in">
             {featuredMovie && (
@@ -207,7 +221,7 @@ export function App() {
           </div>
         )}
 
-        {/* View Mode 2: Seat Map Booking View */}
+        {/* View Mode 3: Seat Map Booking View */}
         {viewMode === 'BOOKING' && selectedMovie && showtime && (
           <div className="space-y-8 animate-fade-in">
             <MovieHeader
