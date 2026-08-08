@@ -13,6 +13,7 @@ import { MovieFallback } from './data/fallbackMovies';
 import { AlertTriangle, Activity } from 'lucide-react';
 
 const BOOKED_SEATS_STORAGE_KEY = 'cinemaseat_persistent_booked_codes';
+const CLOUD_SYNC_URL = 'https://jsonblob.com/api/jsonBlob/019fe0b1-ef87-76ed-a02e-d1ead4e15086';
 
 // Helper to load booked seat codes from localStorage
 const getStoredBookedSeatCodes = (): string[] => {
@@ -34,6 +35,38 @@ const saveBookedSeatCode = (code: string) => {
     }
   } catch (e) {
     console.error('Failed to save booked seat code:', e);
+  }
+};
+
+// Helper to fetch global cloud booked seats across all devices
+const fetchCloudBookedSeats = async (): Promise<string[]> => {
+  try {
+    const res = await axios.get(CLOUD_SYNC_URL, { timeout: 3000 });
+    if (res.data && Array.isArray(res.data.booked)) {
+      return res.data.booked;
+    }
+  } catch (err) {
+    console.log('Cloud sync fetch fallback');
+  }
+  return [];
+};
+
+// Helper to sync booked seat to global cloud store
+const syncBookedSeatToCloud = async (seatCode: string) => {
+  try {
+    const currentLocal = getStoredBookedSeatCodes();
+    const cloudList = await fetchCloudBookedSeats();
+    
+    // Combine local and cloud seats uniquely
+    const combined = Array.from(new Set([...currentLocal, ...cloudList, seatCode]));
+    
+    // Update local storage
+    localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(combined));
+
+    // Update cloud store for multi-device sync (Phone <-> Laptop)
+    await axios.put(CLOUD_SYNC_URL, { booked: combined }, { timeout: 4000 });
+  } catch (err) {
+    console.error('Failed to sync seat to cloud:', err);
   }
 };
 
@@ -98,37 +131,36 @@ export function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // SMART POLLING: Only update seats state if seat data actually changed to prevent DOM flickering!
+  // MULTI-DEVICE CLOUD POLLER: Synchronize booked seats across Phone <-> Laptop in real-time!
   useEffect(() => {
-    if (!showtime || viewMode !== 'BOOKING' || !isLiveBackend) return;
-
     let isMounted = true;
-    const fetchSeats = async () => {
-      try {
-        const res = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-        if (!isMounted) return;
+    const syncSeatsAcrossDevices = async () => {
+      const cloudSeats = await fetchCloudBookedSeats();
+      const localSeats = getStoredBookedSeatCodes();
+      const combinedBooked = Array.from(new Set([...cloudSeats, ...localSeats]));
 
-        const storedBooked = getStoredBookedSeatCodes();
-        const newSeats: Seat[] = res.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+      if (!isMounted) return;
 
-        const currentSeatsStr = JSON.stringify(seatsRef.current);
-        const newSeatsStr = JSON.stringify(newSeats);
-
-        // Only trigger re-render if seats data changed
-        if (currentSeatsStr !== newSeatsStr) {
-          setSeats(newSeats);
-        }
-      } catch (err) {
-        console.error('Error fetching seat map:', err);
-      }
+      setSeats(prevSeats => {
+        let changed = false;
+        const updated = prevSeats.map(s => {
+          if (combinedBooked.includes(s.seat_code) && s.status !== 'BOOKED') {
+            changed = true;
+            return { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null };
+          }
+          return s;
+        });
+        return changed ? updated : prevSeats;
+      });
     };
 
-    const interval = setInterval(fetchSeats, 3000);
+    syncSeatsAcrossDevices();
+    const interval = setInterval(syncSeatsAcrossDevices, 3000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [showtime, viewMode, isLiveBackend]);
+  }, []);
 
   // Handle Booking Action on any movie card
   const handleBookMovieSeats = useCallback((movie: Movie) => {
@@ -268,7 +300,7 @@ export function App() {
           <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-amber-400" />
-              <span><strong>Vercel Live Preview Mode:</strong> Displaying all 25+ movies dataset with client-side interactive seat map & OTP testing.</span>
+              <span><strong>Vercel Multi-Device Live Sync:</strong> Real-time seat locking active across Phone, Laptop & Desktop browsers.</span>
             </div>
             <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">PREVIEW READY</span>
           </div>
@@ -349,6 +381,7 @@ export function App() {
             const currentSeat = selectedSeatCode;
             if (currentSeat) {
               saveBookedSeatCode(currentSeat);
+              syncBookedSeatToCloud(currentSeat);
               setSeats(prev => prev.map(s => s.seat_code === currentSeat ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
             }
             setShowPaymentModal(false);
@@ -357,7 +390,7 @@ export function App() {
             setSelectedSeatCode(null);
             setHoldExpiresAt(null);
             if (currentSeat) {
-              setToastMessage({ text: `🎉 Seat ${currentSeat} successfully confirmed & permanently locked!`, type: 'success' });
+              setToastMessage({ text: `🎉 Seat ${currentSeat} confirmed & locked across all devices!`, type: 'success' });
             }
           }}
         />
