@@ -7,7 +7,9 @@ const BACKEND_URL = process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000';
 /**
  * Background Payment Recovery Worker
  * Ensures fault isolation: If the Gateway container is stopped and restarted,
- * pending payments automatically recover when the Gateway comes back online!
+ * pending payments where payment was initiated (user_phone IS NOT NULL) automatically 
+ * recover when the Gateway comes back online! Abandoned holds without payment remain 
+ * uncharged so they expire cleanly.
  */
 export async function runPaymentRecoveryWorker() {
   try {
@@ -21,10 +23,11 @@ export async function runPaymentRecoveryWorker() {
       return;
     }
 
-    // 2. Fetch pending bookings older than 10 seconds
+    // 2. Fetch pending bookings where payment was initiated (user_phone IS NOT NULL) older than 10 seconds
     const pendingRes = await pool.query(
       `SELECT * FROM bookings 
        WHERE status = 'PENDING' 
+       AND user_phone IS NOT NULL
        AND created_at < NOW() - INTERVAL '10 seconds'
        AND created_at > NOW() - INTERVAL '15 minutes'
        ORDER BY created_at ASC 
