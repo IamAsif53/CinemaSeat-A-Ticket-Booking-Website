@@ -9,10 +9,36 @@ import {
   getMockShowtime,
   getMockBooking
 } from '../services/bookingService.js';
+import { metrics } from '../middleware/observability.js';
 import axios from 'axios';
 
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:9000';
 export const apiRouter = Router();
+
+// GET /api/metrics (BONUS TASK: Monitoring & Observability)
+apiRouter.get('/metrics', async (_req: Request, res: Response) => {
+  try {
+    const holdsCountRes = await pool.query(`SELECT COUNT(*) FROM showtime_seats WHERE status = 'HELD'`).catch(() => ({ rows: [{ count: 0 }] }));
+    const bookingsCountRes = await pool.query(`SELECT COUNT(*) FROM bookings WHERE status = 'CONFIRMED'`).catch(() => ({ rows: [{ count: 0 }] }));
+
+    res.json({
+      uptime_since: metrics.startTime,
+      total_requests: metrics.totalRequests,
+      successful_requests: metrics.successfulRequests,
+      conflict_409_counts: metrics.conflictCounts,
+      error_500_counts: metrics.errorCounts,
+      active_seat_holds: parseInt(holdsCountRes.rows[0]?.count || '0', 10),
+      confirmed_bookings: parseInt(bookingsCountRes.rows[0]?.count || '0', 10)
+    });
+  } catch (err: any) {
+    res.json({
+      uptime_since: metrics.startTime,
+      total_requests: metrics.totalRequests,
+      successful_requests: metrics.successfulRequests,
+      conflict_409_counts: metrics.conflictCounts
+    });
+  }
+});
 
 // GET /api/movies
 apiRouter.get('/movies', async (req: Request, res: Response) => {

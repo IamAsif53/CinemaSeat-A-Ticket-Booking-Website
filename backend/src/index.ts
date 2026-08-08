@@ -5,6 +5,9 @@ import { apiRouter } from './routes/api.js';
 import { seedDb } from './db/seed.js';
 import { getHoldTTL } from './db/index.js';
 import { syncExpiredHolds, setMockMode } from './services/bookingService.js';
+import { runPaymentRecoveryWorker } from './workers/paymentRecoveryWorker.js';
+import { requestTracingMiddleware } from './middleware/observability.js';
+import { rateLimiterMiddleware } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
@@ -13,6 +16,10 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// BONUS TASK: Observability & Security Middleware
+app.use(requestTracingMiddleware);
+app.use(rateLimiterMiddleware);
 
 // MANDATORY JUDGING HOOK #1: GET /health
 app.get('/health', (_req: Request, res: Response) => {
@@ -26,9 +33,15 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api', apiRouter);
 
+// Background timer to automatically sync expired seat holds from Postgres
 setInterval(() => {
   syncExpiredHolds().catch((err: any) => console.error('[Background Cleanup Error]', err));
 }, 5000);
+
+// BONUS TASK: Background Payment Recovery Worker (Every 15 seconds)
+setInterval(() => {
+  runPaymentRecoveryWorker().catch((err: any) => console.error('[Payment Recovery Worker Error]', err));
+}, 15000);
 
 async function startServer() {
   try {
