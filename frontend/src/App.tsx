@@ -9,14 +9,15 @@ import { SeatMap } from './components/SeatMap';
 import { PaymentModal } from './components/PaymentModal';
 import { TicketReceiptModal } from './components/TicketReceiptModal';
 import { Movie, Showtime, Seat } from './types';
-import { AlertTriangle } from 'lucide-react';
+import { MovieFallback } from './data/fallbackMovies';
+import { AlertTriangle, Activity } from 'lucide-react';
 
 export function App() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [showtime, setShowtime] = useState<Showtime | null>(null);
-  const [seats, setSeats] = useState<Seat[]>([]);
-  const seatsRef = useRef<Seat[]>([]);
+  const [movies, setMovies] = useState<Movie[]>(() => MovieFallback.getMovies());
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => MovieFallback.getMovies()[0]);
+  const [showtime, setShowtime] = useState<Showtime | null>(() => MovieFallback.getInitialShowtime());
+  const [seats, setSeats] = useState<Seat[]>(() => MovieFallback.getInitialSeats());
+  const seatsRef = useRef<Seat[]>(seats);
   seatsRef.current = seats;
 
   const [currentUserId] = useState<string>(() => `user_${Math.floor(Math.random() * 10000)}`);
@@ -30,28 +31,31 @@ export function App() {
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
   const [confirmedBookingRef, setConfirmedBookingRef] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
+  const [isLiveBackend, setIsLiveBackend] = useState<boolean>(false);
 
-  // Load Movies & Initial Showtime
+  // Load Movies & Initial Showtime from Backend API (with fallback if running statically)
   useEffect(() => {
     let isMounted = true;
     const init = async () => {
       try {
-        const mRes = await axios.get('/api/movies');
+        const mRes = await axios.get('/api/movies', { timeout: 3000 });
         if (!isMounted) return;
-        setMovies(mRes.data);
-        if (mRes.data.length > 0) {
+
+        if (mRes.data && Array.isArray(mRes.data) && mRes.data.length > 0) {
+          setMovies(mRes.data);
           setSelectedMovie(mRes.data[0]);
+          setIsLiveBackend(true);
         }
 
-        const stRes = await axios.get('/api/showtimes/showtime-spiderman-8pm');
+        const stRes = await axios.get('/api/showtimes/showtime-spiderman-8pm', { timeout: 3000 });
         if (!isMounted) return;
-        setShowtime(stRes.data);
+        if (stRes.data) setShowtime(stRes.data);
 
-        const seatsRes = await axios.get('/api/showtimes/showtime-spiderman-8pm/seats');
+        const seatsRes = await axios.get('/api/showtimes/showtime-spiderman-8pm/seats', { timeout: 3000 });
         if (!isMounted) return;
-        setSeats(seatsRes.data);
+        if (seatsRes.data && Array.isArray(seatsRes.data)) setSeats(seatsRes.data);
       } catch (err) {
-        console.error('Failed to load initial data:', err);
+        console.log('Using robust client-side catalog mode for preview deployment');
       }
     };
     init();
@@ -60,7 +64,7 @@ export function App() {
 
   // SMART POLLING: Only update seats state if seat data actually changed to prevent DOM flickering!
   useEffect(() => {
-    if (!showtime || viewMode !== 'BOOKING') return;
+    if (!showtime || viewMode !== 'BOOKING' || !isLiveBackend) return;
 
     let isMounted = true;
     const fetchSeats = async () => {
@@ -86,7 +90,7 @@ export function App() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [showtime, viewMode]);
+  }, [showtime, viewMode, isLiveBackend]);
 
   // Handle Booking Action on any movie card
   const handleBookMovieSeats = useCallback((movie: Movie) => {
@@ -105,52 +109,79 @@ export function App() {
     setIsHolding(true);
     setToastMessage(null);
 
-    try {
-      const res = await axios.post(`/api/showtimes/${showtime.id}/hold`, {
-        seat_code: seatCode,
-        user_id: currentUserId
-      });
+    // If live backend API is available
+    if (isLiveBackend) {
+      try {
+        const res = await axios.post(`/api/showtimes/${showtime.id}/hold`, {
+          seat_code: seatCode,
+          user_id: currentUserId
+        });
 
-      if (res.data.success) {
-        setSelectedSeatCode(seatCode);
-        setHeldBookingRef(res.data.booking_ref);
-        setHoldExpiresAt(res.data.hold_expires_at);
-        setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
+        if (res.data.success) {
+          setSelectedSeatCode(seatCode);
+          setHeldBookingRef(res.data.booking_ref);
+          setHoldExpiresAt(res.data.hold_expires_at);
+          setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
 
-        const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-        setSeats(seatsRes.data);
+          const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+          setSeats(seatsRes.data);
+        }
+      } catch (err: any) {
+        const errMsg = err?.response?.data?.message || err?.response?.data?.error || `Failed to hold seat ${seatCode}`;
+        setToastMessage({ text: errMsg, type: 'error' });
+        
+        if (showtime) {
+          const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+          setSeats(seatsRes.data);
+        }
+      } finally {
+        setIsHolding(false);
       }
-    } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.response?.data?.error || `Failed to hold seat ${seatCode}`;
-      setToastMessage({ text: errMsg, type: 'error' });
-      
-      if (showtime) {
-        const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-        setSeats(seatsRes.data);
-      }
-    } finally {
-      setIsHolding(false);
+      return;
     }
-  }, [showtime, isHolding, currentUserId]);
+
+    // Client-side Preview Fallback Mode
+    setTimeout(() => {
+      const mockRef = `REF-${Math.floor(100000 + Math.random() * 900000)}`;
+      const expires = new Date(Date.now() + 60000).toISOString();
+      setSelectedSeatCode(seatCode);
+      setHeldBookingRef(mockRef);
+      setHoldExpiresAt(expires);
+
+      setSeats(prev => prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD', held_by_user_id: currentUserId, hold_expires_at: expires } : s));
+      setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
+      setIsHolding(false);
+    }, 400);
+  }, [showtime, isHolding, currentUserId, isLiveBackend]);
 
   // Handle Manual Cancel Hold Request
   const handleCancelHold = useCallback(async () => {
     if (!heldBookingRef || !showtime) return;
 
-    try {
-      await axios.post('/api/bookings/cancel', { booking_ref: heldBookingRef });
-      setToastMessage({ text: `Seat ${selectedSeatCode} hold cancelled. Returned to Available.`, type: 'success' });
+    if (isLiveBackend) {
+      try {
+        await axios.post('/api/bookings/cancel', { booking_ref: heldBookingRef });
+        setToastMessage({ text: `Seat ${selectedSeatCode} hold cancelled. Returned to Available.`, type: 'success' });
 
-      setSelectedSeatCode(null);
-      setHeldBookingRef(null);
-      setHoldExpiresAt(null);
+        setSelectedSeatCode(null);
+        setHeldBookingRef(null);
+        setHoldExpiresAt(null);
 
-      const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-      setSeats(seatsRes.data);
-    } catch (err: any) {
-      setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
+        const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+        setSeats(seatsRes.data);
+      } catch (err: any) {
+        setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
+      }
+      return;
     }
-  }, [heldBookingRef, showtime, selectedSeatCode]);
+
+    // Client Preview Fallback
+    setSeats(prev => prev.map(s => s.seat_code === selectedSeatCode ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
+    setToastMessage({ text: `Seat ${selectedSeatCode} hold cancelled. Returned to Available.`, type: 'success' });
+    setSelectedSeatCode(null);
+    setHeldBookingRef(null);
+    setHoldExpiresAt(null);
+  }, [heldBookingRef, showtime, selectedSeatCode, isLiveBackend]);
 
   // Handle Automatic Hold Expiration
   const handleHoldExpired = useCallback(async () => {
@@ -167,11 +198,13 @@ export function App() {
       type: 'error'
     });
 
-    if (showtime) {
+    if (isLiveBackend && showtime) {
       const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
       setSeats(seatsRes.data);
+    } else {
+      setSeats(prev => prev.map(s => s.seat_code === seatCode ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
     }
-  }, [selectedSeatCode, showtime]);
+  }, [selectedSeatCode, showtime, isLiveBackend]);
 
   const featuredMovie = movies.find(m => m.id === 'movie-spiderman') || movies[0];
 
@@ -184,6 +217,17 @@ export function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* System Health / Status Badge */}
+        {!isLiveBackend && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-amber-400" />
+              <span><strong>Vercel Live Preview Mode:</strong> Displaying all 25+ movies dataset with client-side interactive seat map & OTP testing.</span>
+            </div>
+            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">PREVIEW READY</span>
+          </div>
+        )}
+
         {/* Toast Alert */}
         {toastMessage && (
           <div className={`mb-6 p-4 rounded-xl flex items-center justify-between text-sm font-semibold animate-fade-in ${
