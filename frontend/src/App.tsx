@@ -12,11 +12,43 @@ import { Movie, Showtime, Seat } from './types';
 import { MovieFallback } from './data/fallbackMovies';
 import { AlertTriangle, Activity } from 'lucide-react';
 
+const BOOKED_SEATS_STORAGE_KEY = 'cinemaseat_persistent_booked_codes';
+
+// Helper to load booked seat codes from localStorage
+const getStoredBookedSeatCodes = (): string[] => {
+  try {
+    const saved = localStorage.getItem(BOOKED_SEATS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+};
+
+// Helper to save booked seat code to localStorage
+const saveBookedSeatCode = (code: string) => {
+  try {
+    const current = getStoredBookedSeatCodes();
+    if (!current.includes(code)) {
+      const updated = [...current, code];
+      localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.error('Failed to save booked seat code:', e);
+  }
+};
+
 export function App() {
   const [movies, setMovies] = useState<Movie[]>(() => MovieFallback.getMovies());
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => MovieFallback.getMovies()[0]);
   const [showtime, setShowtime] = useState<Showtime | null>(() => MovieFallback.getInitialShowtime());
-  const [seats, setSeats] = useState<Seat[]>(() => MovieFallback.getInitialSeats());
+  
+  // Initialize seats state merged with localStorage persistent booked codes!
+  const [seats, setSeats] = useState<Seat[]>(() => {
+    const initialSeats = MovieFallback.getInitialSeats();
+    const storedBooked = getStoredBookedSeatCodes();
+    return initialSeats.map(s => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s);
+  });
+  
   const seatsRef = useRef<Seat[]>(seats);
   seatsRef.current = seats;
 
@@ -53,7 +85,11 @@ export function App() {
 
         const seatsRes = await axios.get('/api/showtimes/showtime-spiderman-8pm/seats', { timeout: 3000 });
         if (!isMounted) return;
-        if (seatsRes.data && Array.isArray(seatsRes.data)) setSeats(seatsRes.data);
+        if (seatsRes.data && Array.isArray(seatsRes.data)) {
+          const storedBooked = getStoredBookedSeatCodes();
+          const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+          setSeats(merged);
+        }
       } catch (err) {
         console.log('Using robust client-side catalog mode for preview deployment');
       }
@@ -72,7 +108,9 @@ export function App() {
         const res = await axios.get(`/api/showtimes/${showtime.id}/seats`);
         if (!isMounted) return;
 
-        const newSeats: Seat[] = res.data;
+        const storedBooked = getStoredBookedSeatCodes();
+        const newSeats: Seat[] = res.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+
         const currentSeatsStr = JSON.stringify(seatsRef.current);
         const newSeatsStr = JSON.stringify(newSeats);
 
@@ -124,7 +162,9 @@ export function App() {
           setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
 
           const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-          setSeats(seatsRes.data);
+          const storedBooked = getStoredBookedSeatCodes();
+          const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+          setSeats(merged);
         }
       } catch (err: any) {
         const errMsg = err?.response?.data?.message || err?.response?.data?.error || `Failed to hold seat ${seatCode}`;
@@ -132,7 +172,9 @@ export function App() {
         
         if (showtime) {
           const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-          setSeats(seatsRes.data);
+          const storedBooked = getStoredBookedSeatCodes();
+          const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+          setSeats(merged);
         }
       } finally {
         setIsHolding(false);
@@ -168,7 +210,9 @@ export function App() {
         setHoldExpiresAt(null);
 
         const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-        setSeats(seatsRes.data);
+        const storedBooked = getStoredBookedSeatCodes();
+        const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+        setSeats(merged);
       } catch (err: any) {
         setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
       }
@@ -200,7 +244,9 @@ export function App() {
 
     if (isLiveBackend && showtime) {
       const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-      setSeats(seatsRes.data);
+      const storedBooked = getStoredBookedSeatCodes();
+      const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+      setSeats(merged);
     } else {
       setSeats(prev => prev.map(s => s.seat_code === seatCode ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
     }
@@ -302,6 +348,7 @@ export function App() {
           onSuccess={(ref) => {
             const currentSeat = selectedSeatCode;
             if (currentSeat) {
+              saveBookedSeatCode(currentSeat);
               setSeats(prev => prev.map(s => s.seat_code === currentSeat ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
             }
             setShowPaymentModal(false);
@@ -310,7 +357,7 @@ export function App() {
             setSelectedSeatCode(null);
             setHoldExpiresAt(null);
             if (currentSeat) {
-              setToastMessage({ text: `🎉 Seat ${currentSeat} successfully confirmed & locked!`, type: 'success' });
+              setToastMessage({ text: `🎉 Seat ${currentSeat} successfully confirmed & permanently locked!`, type: 'success' });
             }
           }}
         />

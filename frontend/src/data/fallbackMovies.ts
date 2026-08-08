@@ -325,13 +325,9 @@ export class MovieFallback {
       for (let i = 1; i <= seatsPerRow; i++) {
         const code = `${r}${i}`;
         let status: 'AVAILABLE' | 'HELD' | 'BOOKED' = 'AVAILABLE';
-        let heldBy = null;
 
         if (code === 'A3' || code === 'A4') {
           status = 'BOOKED';
-        } else if (code === 'C5') {
-          status = 'HELD';
-          heldBy = 'user_other';
         }
 
         seats.push({
@@ -339,7 +335,7 @@ export class MovieFallback {
           showtime_id: 'showtime-spiderman-8pm',
           seat_code: code,
           status,
-          held_by_user_id: heldBy,
+          held_by_user_id: null,
           hold_expires_at: null
         });
       }
