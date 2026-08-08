@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CreditCard, ShieldCheck, Lock, Smartphone, KeyRound, AlertTriangle, ArrowRight, ShoppingBag } from 'lucide-react';
+import { CreditCard, ShieldCheck, Lock, Smartphone, KeyRound, AlertTriangle, ArrowRight, ShoppingBag, Tag, Check, X } from 'lucide-react';
 import axios from 'axios';
 import { SnackItem } from '../types';
 
@@ -10,6 +10,12 @@ interface PaymentModalProps {
   selectedSnacks?: SnackItem[];
   onClose: () => void;
   onSuccess: (bookingRef: string) => void;
+}
+
+interface AppliedPromo {
+  code: string;
+  discountAmount: number;
+  label: string;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -31,10 +37,53 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // Judge misbehavior header selector
   const [selectedMockHeader, setSelectedMockHeader] = useState<string>('NORMAL');
 
+  // Feature #6: Promo Code & Discount Voucher System
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [promoMessage, setPromoMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
   const isValidBDPhone = (phone: string) => {
     const cleaned = phone.trim().replace(/[\s-]/g, '');
     return /^(?:\+?88)?01[3-9]\d{8}$/.test(cleaned);
   };
+
+  // Promo Code Validation Handler
+  const handleApplyPromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPromoMessage(null);
+    const code = promoCodeInput.trim().toUpperCase();
+
+    if (!code) {
+      setPromoMessage({ text: 'Please enter a promo code (e.g. CINEMA50, IMAX100, HACKATHON2026).', type: 'error' });
+      return;
+    }
+
+    if (code === 'CINEMA50') {
+      const discount = 50;
+      setAppliedPromo({ code, discountAmount: discount, label: 'BDT 50 OFF' });
+      setPromoMessage({ text: '🎉 CINEMA50 Applied! BDT 50 discount deducted.', type: 'success' });
+      setPromoCodeInput('');
+    } else if (code === 'IMAX100') {
+      const discount = 100;
+      setAppliedPromo({ code, discountAmount: discount, label: 'BDT 100 OFF' });
+      setPromoMessage({ text: '🌟 IMAX100 Applied! BDT 100 IMAX Premiere discount deducted.', type: 'success' });
+      setPromoCodeInput('');
+    } else if (code === 'HACKATHON2026') {
+      const discount = Math.round(amount * 0.25);
+      setAppliedPromo({ code, discountAmount: discount, label: '25% Special Hackathon OFF' });
+      setPromoMessage({ text: `🚀 HACKATHON2026 Applied! 25% OFF (-BDT ${discount}) deducted.`, type: 'success' });
+      setPromoCodeInput('');
+    } else if (code === 'SNACKFREE') {
+      const discount = 120;
+      setAppliedPromo({ code, discountAmount: discount, label: 'BDT 120 Free Concessions Voucher' });
+      setPromoMessage({ text: '🍿 SNACKFREE Applied! BDT 120 Concessions Voucher deducted.', type: 'success' });
+      setPromoCodeInput('');
+    } else {
+      setPromoMessage({ text: 'Invalid promo code. Try CINEMA50, IMAX100, or HACKATHON2026.', type: 'error' });
+    }
+  };
+
+  const finalPayableAmount = Math.max(0, amount - (appliedPromo?.discountAmount || 0));
 
   // Step 1: Send OTP to Bangladeshi Phone Number
   const handleSendOTP = async (e: React.FormEvent) => {
@@ -158,11 +207,75 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </select>
           </div>
 
+          {/* Feature #6: Promo Code / Voucher Card */}
+          <div className="p-3.5 rounded-xl bg-dark-800/80 border border-gray-800 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-gray-300">
+              <span className="flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-brand-400" />
+                <span>Have a Promo Code?</span>
+              </span>
+              <span className="text-[10px] text-gray-400 font-normal">e.g. CINEMA50, IMAX100</span>
+            </div>
+
+            {appliedPromo ? (
+              <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 flex items-center justify-between text-xs text-emerald-300 font-semibold">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{appliedPromo.code}: {appliedPromo.label} (-BDT {appliedPromo.discountAmount})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppliedPromo(null);
+                    setPromoMessage({ text: 'Promo code removed.', type: 'error' });
+                  }}
+                  className="text-gray-400 hover:text-white p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleApplyPromo} className="flex gap-2">
+                <input
+                  type="text"
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value)}
+                  placeholder="Enter code (CINEMA50, IMAX100)"
+                  className="flex-1 bg-dark-900 text-white px-3 py-1.5 rounded-lg border border-gray-700 text-xs focus:border-brand-500 focus:outline-none uppercase"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow transition shrink-0"
+                >
+                  Apply
+                </button>
+              </form>
+            )}
+
+            {promoMessage && (
+              <p className={`text-[11px] font-medium ${promoMessage.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {promoMessage.text}
+              </p>
+            )}
+          </div>
+
           {/* Amount Due Card */}
           <div className="p-4 rounded-xl bg-dark-800 border border-gray-800 space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-400 font-medium">Total Payable Amount</span>
-              <span className="text-lg font-black text-brand-400 font-sans">BDT {amount}</span>
+              <span className="text-gray-400 font-medium">Original Amount</span>
+              <span className="text-gray-400 line-through">BDT {amount}</span>
+            </div>
+
+            {appliedPromo && (
+              <div className="flex items-center justify-between text-xs text-emerald-400 font-semibold">
+                <span>Voucher Discount ({appliedPromo.code})</span>
+                <span>- BDT {appliedPromo.discountAmount}</span>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-gray-700 flex items-center justify-between text-xs">
+              <span className="text-gray-200 font-extrabold uppercase">Final Total Payable</span>
+              <span className="text-xl font-black text-brand-400 font-sans">BDT {finalPayableAmount}</span>
             </div>
 
             {selectedSnacks && selectedSnacks.length > 0 && (
@@ -198,13 +311,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   <span className="text-[10px] text-brand-400 font-normal">Valid: 013-019</span>
                 </label>
                 <div className="relative">
-                  <Smartphone className="w-4 h-4 text-gray-500 absolute left-3.5 top-3.5" />
+                  <Smartphone className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
                   <input
                     type="tel"
                     value={userPhone}
                     onChange={(e) => setUserPhone(e.target.value)}
                     placeholder="01712345678"
-                    className="w-full bg-dark-900 text-white pl-10 pr-4 py-2.5 rounded-xl border border-gray-700 text-sm focus:border-brand-500 focus:outline-none"
+                    className="w-full bg-dark-900 text-white pl-9 pr-4 py-2.5 rounded-xl border border-gray-700 text-xs focus:border-brand-500 focus:outline-none font-mono"
                     required
                   />
                 </div>
@@ -213,9 +326,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-extrabold text-xs shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 transition disabled:opacity-50 min-h-[44px]"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 via-brand-500 to-amber-500 hover:from-brand-500 hover:to-amber-400 text-white font-extrabold text-xs shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 transition disabled:opacity-50 min-h-[44px]"
               >
-                <span>{loading ? 'Sending OTP Code...' : 'Send 6-Digit Verification OTP'}</span>
+                {loading ? 'Sending SMS OTP...' : 'Send 6-Digit Gateway OTP'}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
@@ -224,48 +337,52 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Step 2 Form: 6-Digit OTP Verification */}
           {otpStep === 'OTP_INPUT' && (
             <form onSubmit={handleVerifyOTP} className="space-y-4 animate-fade-in">
-              {/* Simulated SMS Notification Banner */}
-              {generatedOtp && (
-                <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs space-y-1">
-                  <div className="font-bold flex items-center justify-between">
-                    <span>💬 Simulated SMS Gateway</span>
-                    <span className="font-mono bg-emerald-900/80 px-2 py-0.5 rounded text-white font-bold">{generatedOtp}</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-400">
-                    OTP Code sent to <strong>{userPhone}</strong>: Enter <strong>{generatedOtp}</strong> below to confirm.
+              <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-semibold text-center space-y-1">
+                <p>📲 OTP SMS Sent to <strong>{userPhone}</strong></p>
+                {generatedOtp && (
+                  <p className="text-[11px] text-emerald-200">
+                    Simulated Gateway Code: <strong className="font-mono text-white text-xs underline">{generatedOtp}</strong>
                   </p>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-300 flex items-center justify-between">
-                  <span>Enter 6-Digit OTP Code</span>
-                  <button type="button" onClick={() => setOtpStep('PHONE_INPUT')} className="text-[10px] text-brand-400 underline">
-                    Change Phone
-                  </button>
+                <label className="block text-xs font-bold text-gray-300">
+                  Enter 6-Digit Verification Code
                 </label>
                 <div className="relative">
-                  <KeyRound className="w-4 h-4 text-gray-500 absolute left-3.5 top-3.5" />
+                  <KeyRound className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
                   <input
                     type="text"
                     maxLength={6}
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="Enter 6-digit code (e.g. 816092)"
-                    className="w-full bg-dark-900 text-white pl-10 pr-4 py-2.5 rounded-xl border border-gray-700 text-sm font-mono tracking-widest focus:border-brand-500 focus:outline-none"
+                    placeholder="Enter 6-digit OTP"
+                    className="w-full bg-dark-900 text-white pl-9 pr-4 py-2.5 rounded-xl border border-brand-500 text-sm font-mono tracking-widest text-center focus:outline-none"
                     required
+                    autoFocus
                   />
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 transition disabled:opacity-50 min-h-[44px]"
-              >
-                <Lock className="w-4 h-4" />
-                <span>{loading ? 'Verifying OTP & Paying...' : 'Verify OTP & Confirm Booking'}</span>
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOtpStep('PHONE_INPUT')}
+                  className="px-4 py-3 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 font-bold text-xs border border-gray-700 transition"
+                >
+                  Back
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-brand-500 hover:from-emerald-500 hover:to-brand-400 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 transition disabled:opacity-50 min-h-[44px]"
+                >
+                  {loading ? 'Verifying OTP & Processing Payment...' : `Verify OTP & Pay BDT ${finalPayableAmount}`}
+                  <Lock className="w-4 h-4" />
+                </button>
+              </div>
             </form>
           )}
         </div>
