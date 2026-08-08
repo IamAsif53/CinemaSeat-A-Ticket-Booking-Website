@@ -11,6 +11,7 @@ import { PaymentModal } from './components/PaymentModal';
 import { TicketReceiptModal } from './components/TicketReceiptModal';
 import { MyTicketsDrawer } from './components/MyTicketsDrawer';
 import { TrailerModal } from './components/TrailerModal';
+import { TelemetryWidget } from './components/TelemetryWidget';
 import { Movie, Showtime, Seat, SnackItem, Booking } from './types';
 import { MovieFallback } from './data/fallbackMovies';
 import { AlertTriangle } from 'lucide-react';
@@ -127,6 +128,7 @@ export function App() {
   const [myTickets, setMyTickets] = useState<Booking[]>(() => getStoredMyTickets());
   const [showTicketDrawer, setShowTicketDrawer] = useState<boolean>(false);
   const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
+  const [showTelemetryModal, setShowTelemetryModal] = useState<boolean>(false);
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const [isLiveBackend, setIsLiveBackend] = useState<boolean>(false);
@@ -335,6 +337,7 @@ export function App() {
         onNavigateHome={() => { setViewMode('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
         onNavigateCatalog={() => { setViewMode('CATALOG'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
         onOpenTickets={() => setShowTicketDrawer(true)}
+        onOpenTelemetry={() => setShowTelemetryModal(true)}
         ticketCount={myTickets.length}
       />
 
@@ -420,6 +423,12 @@ export function App() {
         isOpen={showTicketDrawer}
         onClose={() => setShowTicketDrawer(false)}
         tickets={myTickets}
+      />
+
+      {/* Live System Telemetry Analytics Widget */}
+      <TelemetryWidget
+        isOpen={showTelemetryModal}
+        onClose={() => setShowTelemetryModal(false)}
       />
 
       {/* HD Trailer Video Player Modal */}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Film, Activity, Clock, ArrowLeft, Home, Compass, Ticket } from 'lucide-react';
+import { Film, Activity, Clock, ArrowLeft, Home, Compass, Ticket, BarChart2 } from 'lucide-react';
 import axios from 'axios';
 
 interface NavbarProps {
@@ -7,6 +7,7 @@ interface NavbarProps {
   onNavigateHome?: () => void;
   onNavigateCatalog?: () => void;
   onOpenTickets?: () => void;
+  onOpenTelemetry?: () => void;
   ticketCount?: number;
 }
 
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateHome,
   onNavigateCatalog,
   onOpenTickets,
+  onOpenTelemetry,
   ticketCount = 0
 }) => {
   const [healthStatus, setHealthStatus] = useState<'UP' | 'DOWN' | 'CHECKING'>('CHECKING');
@@ -91,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
         </div>
 
-        {/* Live Info, Ticket Wallet & Health Indicator */}
+        {/* Live Info, Ticket Wallet, Telemetry & Health Indicator */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Digital Ticket Wallet Button */}
           <button
@@ -106,6 +108,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* Telemetry Analytics Widget Button */}
+          {onOpenTelemetry && (
+            <button
+              onClick={onOpenTelemetry}
+              className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-brand-300 font-bold text-xs border border-brand-500/30 flex items-center gap-1.5 transition shadow-sm"
+              title="Open Live Concurrency Telemetry"
+            >
+              <BarChart2 className="w-4 h-4 text-brand-400 animate-pulse" />
+              <span className="hidden sm:inline">Telemetry</span>
+            </button>
+          )}
 
           {viewMode === 'BOOKING' && (
             <button
