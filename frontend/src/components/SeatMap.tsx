@@ -110,7 +110,6 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
   const rows = Array.from(new Set(seats.map(getRowLabel))).sort();
 
   const getSeatViewQuality = (seatCode: string) => {
-    if (seatCode === 'F12' || seatCode === 'C4' || seatCode === 'C5') return { tag: '🔥 PRIME CENTER', desc: 'Optimal 4K viewing angle & Dolby Atmos sweet spot' };
     if (['E', 'F'].includes(seatCode[0])) return { tag: '⭐ VIP Back Row', desc: 'Extra legroom & elevated screen view' };
     if (['C', 'D'].includes(seatCode[0])) return { tag: '🎬 Standard Center', desc: 'Great balanced viewing distance' };
     return { tag: '👁️ Front Row', desc: 'Immersive close-up cinematic experience' };
@@ -198,11 +197,6 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
             <span className="text-gray-500">Booked</span>
           </div>
         </div>
-
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300">
-          <Flame className="w-3.5 h-3.5 text-amber-400" />
-          <span>Seat <strong>C4 / C5</strong> is Prime Viewing Center!</span>
-        </div>
       </div>
 
       {/* Screen Curved Header */}
@@ -213,7 +207,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
         </span>
       </div>
 
-      {/* Seat Grid - Rendered in Rows & Columns */}
+      {/* Seat Grid - Clean Rows & Columns without yellow dots */}
       <div className="overflow-x-auto pb-4">
         <div className="min-w-[640px] flex flex-col items-center gap-3">
           {rows.map(row => {
@@ -226,7 +220,6 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
                 <span className="w-6 text-center font-extrabold text-xs text-brand-400">{row}</span>
                 <div className="flex items-center gap-2 sm:gap-3">
                   {rowSeats.map(seat => {
-                    const isPrime = seat.seat_code === 'C4' || seat.seat_code === 'C5' || seat.seat_code === 'F12';
                     const isHeldByMe = seat.status === 'HELD' && seat.held_by_user_id === currentUserId;
                     const isHeldByOther = seat.status === 'HELD' && !isHeldByMe;
                     const isBooked = seat.status === 'BOOKED';
@@ -253,9 +246,6 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
                         className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex flex-col items-center justify-center text-xs transition-all duration-150 relative group font-sans ${bgClass}`}
                       >
                         <span className="font-bold">{seat.seat_code}</span>
-                        {isPrime && !isBooked && (
-                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 shadow"></span>
-                        )}
                         {isHeldByOther && (
                           <Lock className="w-2.5 h-2.5 text-amber-400 absolute bottom-0.5" />
                         )}
