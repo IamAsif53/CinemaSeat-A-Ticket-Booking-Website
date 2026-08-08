@@ -10,6 +10,7 @@ import { SnackModal } from './components/SnackModal';
 import { PaymentModal } from './components/PaymentModal';
 import { TicketReceiptModal } from './components/TicketReceiptModal';
 import { MyTicketsDrawer } from './components/MyTicketsDrawer';
+import { TrailerModal } from './components/TrailerModal';
 import { Movie, Showtime, Seat, SnackItem, Booking } from './types';
 import { MovieFallback } from './data/fallbackMovies';
 import { AlertTriangle } from 'lucide-react';
@@ -125,6 +126,7 @@ export function App() {
   const [confirmedBookingRef, setConfirmedBookingRef] = useState<string | null>(null);
   const [myTickets, setMyTickets] = useState<Booking[]>(() => getStoredMyTickets());
   const [showTicketDrawer, setShowTicketDrawer] = useState<boolean>(false);
+  const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const [isLiveBackend, setIsLiveBackend] = useState<boolean>(false);
@@ -202,6 +204,10 @@ export function App() {
     setHoldExpiresAt(null);
     setSelectedSnacks([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleOpenTrailer = useCallback((movie: Movie) => {
+    setTrailerMovie(movie);
   }, []);
 
   // Handle Seat Hold Request
@@ -356,6 +362,7 @@ export function App() {
             movies={movies}
             onExploreMovies={() => { setViewMode('CATALOG'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
             onQuickBook={handleBookMovieSeats}
+            onWatchTrailer={handleOpenTrailer}
           />
         )}
 
@@ -363,10 +370,18 @@ export function App() {
         {viewMode === 'CATALOG' && (
           <div className="space-y-8 animate-fade-in">
             {featuredMovie && (
-              <HeroBanner featuredMovie={featuredMovie} onBookNow={handleBookMovieSeats} />
+              <HeroBanner 
+                featuredMovie={featuredMovie} 
+                onBookNow={handleBookMovieSeats} 
+                onWatchTrailer={handleOpenTrailer} 
+              />
             )}
 
-            <MovieGrid movies={movies} onBookSeats={handleBookMovieSeats} />
+            <MovieGrid 
+              movies={movies} 
+              onBookSeats={handleBookMovieSeats} 
+              onWatchTrailer={handleOpenTrailer} 
+            />
           </div>
         )}
 
@@ -406,6 +421,15 @@ export function App() {
         onClose={() => setShowTicketDrawer(false)}
         tickets={myTickets}
       />
+
+      {/* HD Trailer Video Player Modal */}
+      {trailerMovie && (
+        <TrailerModal
+          movie={trailerMovie}
+          onClose={() => setTrailerMovie(null)}
+          onBookNow={handleBookMovieSeats}
+        />
+      )}
 
       {/* Snack Builder Modal */}
       {showSnackModal && selectedSeatCode && (

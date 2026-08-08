@@ -6,9 +6,10 @@ interface HomePageProps {
   movies: Movie[];
   onExploreMovies: () => void;
   onQuickBook: (movie: Movie) => void;
+  onWatchTrailer?: (movie: Movie) => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ movies, onExploreMovies, onQuickBook }) => {
+export const HomePage: React.FC<HomePageProps> = ({ movies, onExploreMovies, onQuickBook, onWatchTrailer }) => {
   const topMovies = movies.slice(0, 4);
 
   return (
@@ -51,13 +52,13 @@ export const HomePage: React.FC<HomePageProps> = ({ movies, onExploreMovies, onQ
               <ArrowRight className="w-5 h-5 text-amber-200" />
             </button>
 
-            {movies[0] && (
+            {movies[0] && onWatchTrailer && (
               <button
-                onClick={() => onQuickBook(movies[0])}
+                onClick={() => onWatchTrailer(movies[0])}
                 className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-dark-800/90 hover:bg-dark-700 text-gray-200 hover:text-white font-bold text-xs sm:text-sm border border-gray-700/80 shadow-lg flex items-center justify-center gap-2 transition min-h-[52px]"
               >
-                <Flame className="w-4 h-4 text-amber-400" />
-                <span>Midnight Premiere (Seat F12)</span>
+                <Play className="w-4 h-4 text-brand-400 fill-brand-400" />
+                <span>Watch Spider-Man Trailer</span>
               </button>
             )}
           </div>
@@ -151,9 +152,19 @@ export const HomePage: React.FC<HomePageProps> = ({ movies, onExploreMovies, onQ
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {topMovies.map((m) => (
             <div key={m.id} className="group glass-card rounded-2xl overflow-hidden border border-white/10 flex flex-col hover:border-brand-500/50 hover:shadow-2xl transition duration-300">
-              <div className="relative h-64 overflow-hidden bg-dark-800">
+              <div 
+                onClick={() => onWatchTrailer && onWatchTrailer(m)}
+                className="relative h-64 overflow-hidden bg-dark-800 cursor-pointer"
+              >
                 <img src={m.poster_url} alt={m.title} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-900 via-transparent to-transparent"></div>
+
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="w-12 h-12 rounded-full bg-brand-600/90 text-white flex items-center justify-center shadow-xl transform group-hover:scale-110 transition">
+                    <Play className="w-5 h-5 fill-white ml-0.5" />
+                  </div>
+                </div>
+
                 <div className="absolute top-3 left-3 bg-dark-900/90 px-2.5 py-1 rounded-lg text-amber-400 font-bold text-xs flex items-center gap-1">
                   <Star className="w-3.5 h-3.5 fill-amber-400" />
                   <span>{m.imdb_rating || 8.8}</span>
@@ -166,13 +177,24 @@ export const HomePage: React.FC<HomePageProps> = ({ movies, onExploreMovies, onQ
                   <p className="text-xs text-gray-400 line-clamp-2 mt-1">{m.description}</p>
                 </div>
 
-                <button
-                  onClick={() => onQuickBook(m)}
-                  className="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2 min-h-[42px]"
-                >
-                  <Ticket className="w-4 h-4" />
-                  <span>Book Seats</span>
-                </button>
+                <div className="flex gap-2">
+                  {onWatchTrailer && (
+                    <button
+                      onClick={() => onWatchTrailer(m)}
+                      className="px-3 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white font-bold text-xs border border-gray-700 flex items-center justify-center gap-1 transition"
+                    >
+                      <Play className="w-3.5 h-3.5 text-brand-400 fill-brand-400" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => onQuickBook(m)}
+                    className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2 min-h-[42px]"
+                  >
+                    <Ticket className="w-4 h-4" />
+                    <span>Book Seats</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -1,13 +1,18 @@
 import React from 'react';
 import { Movie } from '../types';
-import { Sparkles, Calendar, Clock, Ticket, Flame } from 'lucide-react';
+import { Sparkles, Calendar, Clock, Ticket, Flame, Play } from 'lucide-react';
 
 interface HeroBannerProps {
   featuredMovie: Movie;
   onBookNow: (movie: Movie) => void;
+  onWatchTrailer?: (movie: Movie) => void;
 }
 
-export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredMovie, onBookNow }) => {
+export const HeroBanner: React.FC<HeroBannerProps> = ({
+  featuredMovie,
+  onBookNow,
+  onWatchTrailer
+}) => {
   return (
     <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden glass-card border border-white/10 mb-6 sm:mb-10 p-5 sm:p-10 shadow-2xl">
       {/* Background Gradient Glow */}
@@ -47,20 +52,33 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredMovie, onBookNow
             </div>
           </div>
 
-          {/* CTA Action */}
-          <div className="pt-3 sm:pt-4 flex justify-center lg:justify-start">
+          {/* CTA Actions */}
+          <div className="pt-3 sm:pt-4 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
+            {onWatchTrailer && (
+              <button
+                onClick={() => onWatchTrailer(featuredMovie)}
+                className="w-full sm:w-auto px-5 py-3.5 rounded-2xl bg-dark-800/90 hover:bg-dark-700 text-white font-extrabold text-xs sm:text-sm border border-gray-700 flex items-center justify-center gap-2 transition transform hover:scale-105 min-h-[48px]"
+              >
+                <Play className="w-4 h-4 text-brand-400 fill-brand-400" />
+                <span>Watch Trailer</span>
+              </button>
+            )}
+
             <button
               onClick={() => onBookNow(featuredMovie)}
               className="w-full sm:w-auto px-6 sm:px-8 py-3.5 rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-amber-500 hover:from-brand-500 hover:to-amber-400 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-brand-500/30 flex items-center justify-center gap-2.5 transition transform hover:scale-105 active:scale-95 min-h-[48px]"
             >
               <Ticket className="w-5 h-5" />
-              <span>Book Premiere Seats Now (Seat F12)</span>
+              <span>Book Premiere Seats Now</span>
             </button>
           </div>
         </div>
 
-        {/* Right Hero Image Card */}
-        <div className="shrink-0 relative group">
+        {/* Right Hero Image Card with Hover Play Overlay */}
+        <div 
+          onClick={() => onWatchTrailer && onWatchTrailer(featuredMovie)}
+          className="shrink-0 relative group cursor-pointer"
+        >
           <div className="w-36 h-52 sm:w-60 sm:h-88 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 relative transform group-hover:scale-105 transition-all duration-500">
             <img 
               src={featuredMovie.poster_url} 
@@ -68,6 +86,12 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredMovie, onBookNow
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-transparent to-transparent"></div>
+
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="w-14 h-14 rounded-full bg-brand-600/90 text-white flex items-center justify-center shadow-xl transform group-hover:scale-110 transition">
+                <Play className="w-6 h-6 fill-white ml-1" />
+              </div>
+            </div>
           </div>
           <span className="absolute top-2.5 left-2.5 sm:top-4 sm:left-4 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-xs font-black bg-brand-600 text-white rounded-lg shadow-lg">
             {featuredMovie.rating}

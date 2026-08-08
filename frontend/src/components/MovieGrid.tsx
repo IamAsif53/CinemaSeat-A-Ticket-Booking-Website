@@ -6,9 +6,10 @@ import { Search, SlidersHorizontal, X, Film } from 'lucide-react';
 interface MovieGridProps {
   movies: Movie[];
   onBookSeats: (movie: Movie) => void;
+  onWatchTrailer?: (movie: Movie) => void;
 }
 
-export const MovieGrid: React.FC<MovieGridProps> = ({ movies, onBookSeats }) => {
+export const MovieGrid: React.FC<MovieGridProps> = ({ movies, onBookSeats, onWatchTrailer }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('All');
   const [sortBy, setSortBy] = useState<'FEATURED' | 'RATING' | 'DURATION'>('FEATURED');
@@ -123,7 +124,7 @@ export const MovieGrid: React.FC<MovieGridProps> = ({ movies, onBookSeats }) => 
       {filteredMovies.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
           {filteredMovies.map((m) => (
-            <MovieCard key={m.id} movie={m} onBookSeats={onBookSeats} />
+            <MovieCard key={m.id} movie={m} onBookSeats={onBookSeats} onWatchTrailer={onWatchTrailer} />
           ))}
         </div>
       ) : (
