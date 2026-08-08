@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Film, Activity, Clock, ShieldCheck } from 'lucide-react';
+import { Film, Activity, Clock, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  viewMode?: 'CATALOG' | 'BOOKING';
+  onBackToCatalog?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ viewMode = 'CATALOG', onBackToCatalog }) => {
   const [healthStatus, setHealthStatus] = useState<'UP' | 'DOWN' | 'CHECKING'>('CHECKING');
 
   useEffect(() => {
@@ -27,21 +32,33 @@ export const Navbar: React.FC = () => {
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 text-white shadow-lg shadow-brand-500/30">
-            <Film className="w-6 h-6 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-brand-400 bg-clip-text text-transparent font-sans">
-                CinemaSeat
-              </span>
-              <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">
-                Phase 2
-              </span>
+        {/* Brand Logo & Back Button */}
+        <div className="flex items-center gap-4">
+          {viewMode === 'BOOKING' && onBackToCatalog && (
+            <button
+              onClick={onBackToCatalog}
+              className="p-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-bold flex items-center gap-1.5 transition"
+            >
+              <ArrowLeft className="w-4 h-4 text-brand-400" />
+              <span>Back to Movies</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 text-white shadow-lg shadow-brand-500/30">
+              <Film className="w-6 h-6 animate-pulse" />
             </div>
-            <p className="text-xs text-gray-400 font-medium">When Everyone Wants the Same Seat</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-brand-400 bg-clip-text text-transparent font-sans">
+                  CinemaSeat
+                </span>
+                <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">
+                  Phase 2
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 font-medium">When Everyone Wants the Same Seat</p>
+            </div>
           </div>
         </div>
 

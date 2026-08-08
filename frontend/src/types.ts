@@ -7,6 +7,8 @@ export interface Movie {
   genre: string;
   rating: string;
   release_date: string;
+  imdb_rating?: number;
+  badge?: 'HOT RUSH' | 'FEATURED' | 'IMAX 3D' | 'PREMIERE' | 'DOLBY ATMOS';
 }
 
 export interface Showtime {
@@ -43,7 +45,7 @@ export interface Booking {
   user_phone?: string;
   amount: number;
   currency: string;
-  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'EXPIRED';
+  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
   payment_id?: string;
   seat_code?: string;
   screen_name?: string;

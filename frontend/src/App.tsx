@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Navbar } from './components/Navbar';
+import { HeroBanner } from './components/HeroBanner';
+import { MovieGrid } from './components/MovieGrid';
 import { MovieHeader } from './components/MovieHeader';
 import { SeatMap } from './components/SeatMap';
 import { PaymentModal } from './components/PaymentModal';
@@ -15,6 +17,7 @@ export function App() {
   const [seats, setSeats] = useState<Seat[]>([]);
   const [currentUserId] = useState<string>(() => `user_${Math.floor(Math.random() * 10000)}`);
   
+  const [viewMode, setViewMode] = useState<'CATALOG' | 'BOOKING'>('CATALOG');
   const [selectedSeatCode, setSelectedSeatCode] = useState<string | null>(null);
   const [heldBookingRef, setHeldBookingRef] = useState<string | null>(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
@@ -46,9 +49,9 @@ export function App() {
     init();
   }, []);
 
-  // Poll Seat Map every 3 seconds for live concurrency updates
+  // Poll Seat Map every 3 seconds for live concurrency updates when in BOOKING view
   useEffect(() => {
-    if (!showtime) return;
+    if (!showtime || viewMode !== 'BOOKING') return;
 
     const fetchSeats = async () => {
       try {
@@ -61,14 +64,16 @@ export function App() {
 
     const interval = setInterval(fetchSeats, 3000);
     return () => clearInterval(interval);
-  }, [showtime]);
+  }, [showtime, viewMode]);
 
-  // Handle Movie Selection Change
-  const handleSelectMovie = (movie: Movie) => {
+  // Handle Booking Action on any movie card
+  const handleBookMovieSeats = (movie: Movie) => {
     setSelectedMovie(movie);
+    setViewMode('BOOKING');
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Handle Seat Hold Request
@@ -125,9 +130,11 @@ export function App() {
     }
   };
 
+  const featuredMovie = movies.find(m => m.id === 'movie-spiderman') || movies[0];
+
   return (
     <div className="min-h-screen bg-dark-900 text-gray-100 flex flex-col font-sans">
-      <Navbar />
+      <Navbar viewMode={viewMode} onBackToCatalog={() => setViewMode('CATALOG')} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Toast Alert */}
@@ -147,30 +154,40 @@ export function App() {
           </div>
         )}
 
-        {/* Movie Header with Selector */}
-        {selectedMovie && showtime && (
-          <MovieHeader
-            movies={movies}
-            selectedMovie={selectedMovie}
-            showtime={showtime}
-            onSelectMovie={handleSelectMovie}
-          />
+        {/* View Mode 1: Catalog View */}
+        {viewMode === 'CATALOG' && (
+          <div className="space-y-8 animate-fade-in">
+            {featuredMovie && (
+              <HeroBanner featuredMovie={featuredMovie} onBookNow={handleBookMovieSeats} />
+            )}
+
+            <MovieGrid movies={movies} onBookSeats={handleBookMovieSeats} />
+          </div>
         )}
 
-        {/* Live Seat Map */}
-        {showtime && (
-          <SeatMap
-            seats={seats}
-            currentUserId={currentUserId}
-            selectedSeatCode={selectedSeatCode}
-            heldBookingRef={heldBookingRef}
-            holdExpiresAt={holdExpiresAt}
-            onHoldSeat={handleHoldSeat}
-            onCancelHold={handleCancelHold}
-            onPaySeat={() => setShowPaymentModal(true)}
-            isHolding={isHolding}
-            showtimeId={showtime.id}
-          />
+        {/* View Mode 2: Seat Map Booking View */}
+        {viewMode === 'BOOKING' && selectedMovie && showtime && (
+          <div className="space-y-8 animate-fade-in">
+            <MovieHeader
+              movies={movies}
+              selectedMovie={selectedMovie}
+              showtime={showtime}
+              onSelectMovie={setSelectedMovie}
+            />
+
+            <SeatMap
+              seats={seats}
+              currentUserId={currentUserId}
+              selectedSeatCode={selectedSeatCode}
+              heldBookingRef={heldBookingRef}
+              holdExpiresAt={holdExpiresAt}
+              onHoldSeat={handleHoldSeat}
+              onCancelHold={handleCancelHold}
+              onPaySeat={() => setShowPaymentModal(true)}
+              isHolding={isHolding}
+              showtimeId={showtime.id}
+            />
+          </div>
         )}
       </main>
 
