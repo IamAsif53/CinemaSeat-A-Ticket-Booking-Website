@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "npx vite build --root frontend --outDir dist",
+    "build": "npm --prefix frontend run build",
     "test:scenario-a": "node scripts/scenario-a.js",
     "test:scenario-b": "node scripts/scenario-b.js"
   },

@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx vite build --root frontend --outDir dist",
+  "buildCommand": "npm --prefix frontend run build",
   "outputDirectory": "frontend/dist",
   "framework": "vite"
 }
