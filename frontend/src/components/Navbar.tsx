@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Film, Activity, Clock, ArrowLeft, Home, Compass } from 'lucide-react';
+import { Film, Activity, Clock, ArrowLeft, Home, Compass, Ticket } from 'lucide-react';
 import axios from 'axios';
 
 interface NavbarProps {
   viewMode?: 'HOME' | 'CATALOG' | 'BOOKING';
   onNavigateHome?: () => void;
   onNavigateCatalog?: () => void;
+  onOpenTickets?: () => void;
+  ticketCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   viewMode = 'HOME',
   onNavigateHome,
-  onNavigateCatalog
+  onNavigateCatalog,
+  onOpenTickets,
+  ticketCount = 0
 }) => {
   const [healthStatus, setHealthStatus] = useState<'UP' | 'DOWN' | 'CHECKING'>('CHECKING');
 
@@ -60,7 +64,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {/* Navigation Links */}
-          <nav className="hidden sm:flex items-center gap-1 text-xs">
+          <nav className="hidden md:flex items-center gap-1 text-xs">
             <button
               onClick={onNavigateHome}
               className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition ${
@@ -87,21 +91,35 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
         </div>
 
-        {/* Live Info & Health Indicator */}
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        {/* Live Info, Ticket Wallet & Health Indicator */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Digital Ticket Wallet Button */}
+          <button
+            onClick={onOpenTickets}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center gap-1.5 transition transform hover:scale-105"
+          >
+            <Ticket className="w-4 h-4 text-amber-300" />
+            <span className="hidden xs:inline">My Tickets</span>
+            {ticketCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-amber-400 text-black text-[10px] font-black flex items-center justify-center ml-0.5">
+                {ticketCount}
+              </span>
+            )}
+          </button>
+
           {viewMode === 'BOOKING' && (
             <button
               onClick={onNavigateCatalog}
               className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-bold flex items-center gap-1.5 transition"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-brand-400" />
-              <span>Back to Movies</span>
+              <span className="hidden sm:inline">Back to Movies</span>
             </button>
           )}
 
           <div className="flex items-center gap-1.5 sm:gap-2 bg-dark-800/80 px-2.5 py-1.5 sm:px-3 rounded-lg border border-gray-800 text-[11px] sm:text-xs">
             <Activity className="w-3.5 h-3.5 text-brand-400" />
-            <span className="text-gray-400 hidden md:inline">System Health:</span>
+            <span className="text-gray-400 hidden lg:inline">System Health:</span>
             {healthStatus === 'UP' ? (
               <span className="flex items-center gap-1 font-semibold text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>

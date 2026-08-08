@@ -9,11 +9,13 @@ import { SeatMap } from './components/SeatMap';
 import { SnackModal } from './components/SnackModal';
 import { PaymentModal } from './components/PaymentModal';
 import { TicketReceiptModal } from './components/TicketReceiptModal';
-import { Movie, Showtime, Seat, SnackItem } from './types';
+import { MyTicketsDrawer } from './components/MyTicketsDrawer';
+import { Movie, Showtime, Seat, SnackItem, Booking } from './types';
 import { MovieFallback } from './data/fallbackMovies';
-import { AlertTriangle, Activity } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 const BOOKED_SEATS_STORAGE_KEY = 'cinemaseat_persistent_booked_codes';
+const MY_TICKETS_STORAGE_KEY = 'cinemaseat_my_tickets';
 const CLOUD_SYNC_URL = 'https://jsonblob.com/api/jsonBlob/019fe0b1-ef87-76ed-a02e-d1ead4e15086';
 
 // Helper to load booked seat codes from localStorage
@@ -36,6 +38,27 @@ const saveBookedSeatCode = (code: string) => {
     }
   } catch (e) {
     console.error('Failed to save booked seat code:', e);
+  }
+};
+
+// Helper to load tickets from localStorage for Digital Wallet
+const getStoredMyTickets = (): Booking[] => {
+  try {
+    const saved = localStorage.getItem(MY_TICKETS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+};
+
+// Helper to save new ticket to Digital Wallet
+const saveMyTicket = (newTicket: Booking) => {
+  try {
+    const current = getStoredMyTickets();
+    const updated = [newTicket, ...current.filter(t => t.booking_ref !== newTicket.booking_ref)];
+    localStorage.setItem(MY_TICKETS_STORAGE_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to save ticket to wallet:', e);
   }
 };
 
@@ -100,6 +123,9 @@ export function App() {
 
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
   const [confirmedBookingRef, setConfirmedBookingRef] = useState<string | null>(null);
+  const [myTickets, setMyTickets] = useState<Booking[]>(() => getStoredMyTickets());
+  const [showTicketDrawer, setShowTicketDrawer] = useState<boolean>(false);
+
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const [isLiveBackend, setIsLiveBackend] = useState<boolean>(false);
 
@@ -302,6 +328,8 @@ export function App() {
         viewMode={viewMode}
         onNavigateHome={() => { setViewMode('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
         onNavigateCatalog={() => { setViewMode('CATALOG'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onOpenTickets={() => setShowTicketDrawer(true)}
+        ticketCount={myTickets.length}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -372,6 +400,13 @@ export function App() {
         )}
       </main>
 
+      {/* Digital Ticket Wallet Drawer */}
+      <MyTicketsDrawer
+        isOpen={showTicketDrawer}
+        onClose={() => setShowTicketDrawer(false)}
+        tickets={myTickets}
+      />
+
       {/* Snack Builder Modal */}
       {showSnackModal && selectedSeatCode && (
         <SnackModal
@@ -401,6 +436,21 @@ export function App() {
               saveBookedSeatCode(currentSeat);
               syncBookedSeatToCloud(currentSeat);
               setSeats(prev => prev.map(s => s.seat_code === currentSeat ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
+
+              // Save confirmed ticket to Digital Wallet
+              const ticketObj: Booking = {
+                booking_ref: ref,
+                showtime_id: showtime?.id || 'showtime-spiderman-8pm',
+                seat_code: currentSeat,
+                amount: totalCheckoutAmount,
+                status: 'CONFIRMED',
+                movie_title: selectedMovie?.title || 'Spider-Man: Brand New Day',
+                screen_name: showtime?.screen_name || 'Grand Hall IMAX 1',
+                created_at: new Date().toISOString(),
+                snacks: selectedSnacks
+              };
+              saveMyTicket(ticketObj);
+              setMyTickets(getStoredMyTickets());
             }
             setShowPaymentModal(false);
             setConfirmedBookingRef(ref);
