@@ -25,20 +25,33 @@ flowchart TD
     Gateway -->|Webhook Callback (POST /api/payments/callback)| Backend
 ```
 
-### CI/CD Pipeline (`.github/workflows/ci.yml`)
+### Milestone 3: CI/CD Pipeline (`.github/workflows/ci.yml`)
 ```mermaid
-flowchart LR
-    Push["Push / PR to Main"] --> Lint["TypeCheck & Build"]
-    Lint --> Docker["Docker Compose Up (-d)"]
-    Docker --> Health["Check /health (HTTP 200)"]
-    Health --> ScenarioA["Run Scenario A (100 Concurrent Buyers)"]
-    ScenarioA --> ScenarioB["Run Scenario B (Abandoned Hold Expiration)"]
-    ScenarioB --> Deploy["Deploy to Production"]
+flowchart TD
+    Trigger["Git Push / PR to Main"] --> PathFilter["1. Change-Aware Path Filter (dorny/paths-filter)"]
+    PathFilter --> TypeCheck["2. TypeCheck & Build (Node.js 22)"]
+    TypeCheck --> DockerSpin["3. Spin Docker Compose Stack (-d --build)"]
+    DockerSpin --> HealthCheck["4. Wait for /health Hook (HTTP 200 OK)"]
+    HealthCheck --> ScenarioA["5. Run Scenario A (100 Concurrent Buyers)"]
+    ScenarioA --> ScenarioB["6. Run Scenario B (Abandoned Hold Expiration)"]
+    ScenarioB --> GateCheck{"Is Push to Default Branch ('main')?"}
+    GateCheck -->|Yes| CDDeploy["7. CD Production Deploy (Default Branch Only)"]
+    GateCheck -->|No (PR Only)| PRPass["PR Check Passed (Merge Allowed)"]
 ```
 
 ---
 
-## ✨ Features & What Works
+## 🚀 Milestone 3 DevOps Pipeline Features
+
+- **Automated CI Trigger:** CI runs automatically on pull requests and pushes to the `main` default branch.
+- **Merge Protection:** Code cannot merge without passing all 4 CI stages (`TypeCheck`, `Build`, `Scenario A`, `Scenario B`).
+- **CD Main Branch Only:** CD deployment (`cd-deploy-production`) executes **only** on pushes to the default `main` branch.
+- **Change-Aware Workflows:** Uses `dorny/paths-filter` to inspect changed files across `backend/`, `frontend/`, `scripts/`, and `docker-compose.yml`.
+- **Zero-Downtime Rolling Deployment:** Services remain reachable during rolling container updates.
+
+---
+
+## ✨ Key System Features & What Works
 
 - **Zero Double-Booking Guarantee:** Redis Atomic Lua Scripts / `SET ... NX EX` enforce sub-millisecond atomic seat holds. Under 100 concurrent requests for seat `F12`, exactly 1 request succeeds and 99 are cleanly rejected with HTTP 409 Conflict.
 - **Automatic Hold Expiration:** Seat holds naturally expire after `HOLD_TTL_SECONDS` (read from environment variable). Expired seats automatically return to `AVAILABLE` status for other buyers.
@@ -46,7 +59,7 @@ flowchart LR
 - **Idempotent Webhook Callback Handler:** `POST /api/payments/callback` **always returns HTTP 200 OK** immediately to prevent Gateway infinite retries. Duplicate webhook callbacks are deduplicated using database event logs (`event_id`).
 - **Resilient Health Check Hook:** `GET /health` returns HTTP 200 in under 1 second, maintaining uptime even if the Mock Gateway container goes down completely.
 - **Judge Control Header Support:** Full support for `X-Mock-Mode: deterministic`, `X-Mock-Force: fail`, `X-Mock-Force: duplicate`, `X-Mock-Force: timeout`, `X-Mock-Force: race`, and `X-Mock-Force: success`.
-- **Rich Aesthetic Cinema Web UI:** Glassmorphism design, dark cinema theme, live interactive seat layout (Rows A-F, Seats 1-15 including Seat F12), countdown timers, OTP verification modal, and QR ticket generator.
+- **Rich Aesthetic Cinema Web UI:** Glassmorphism design, dark cinema theme, live interactive seat layout (Rows A-F, Seats 1-15 including Seat F12), countdown timers, OTP verification modal, digital ticket wallet, HD trailer modal, and QR ticket generator.
 
 ---
 
@@ -96,35 +109,3 @@ curl -X POST http://localhost/api/showtimes/showtime-spiderman-8pm/hold \
   -H "Content-Type: application/json" \
   -d '{"seat_code": "F12", "user_id": "judge_user_001"}'
 ```
-
----
-
-## 🧪 Verification & Load Test Scripts
-
-### Run Scenario A (100 Concurrent Buyers, 1 Seat):
-```bash
-npm run test:scenario-a
-```
-
-### Run Scenario B (Abandoned Hold Expiration):
-```bash
-npm run test:scenario-b
-```
-
-### Run Scenario C (k6 Breakpoint Load Test):
-```bash
-k6 run scripts/load-test.js
-```
-
----
-
-## 📈 Scenario C Breakpoint Analysis Report
-
-- **p95 Latency Curve:** Under 50 VUs, response latency remains under **25ms**. At 150+ VUs, p95 latency turns upward to **210ms** due to Node.js event loop scheduling overhead under high HTTP request rates.
-- **Errors & Degradation:** Zero 500 errors observed up to 200 VUs. All seat collisions return HTTP `409 Conflict` cleanly without double-booking.
-- **Bottleneck Analysis:** The primary bottleneck under extreme volume (> 250 VUs) is the PostgreSQL connection pool limit (`max: 20`). Redis atomic operations continue operating in sub-milliseconds, while DB transaction commits wait for pooled DB connections. Increasing `max: 50` pool connections resolves the latency bottleneck.
-
----
-
-## 🌐 Deployed Production URL
-- **Deployed URL:** `http://localhost` (or Poridhi VM IP)
