@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Seat } from '../types';
-import { Lock, CheckCircle2, Flame, ShieldAlert, Timer, Zap, Eye, BarChart2 } from 'lucide-react';
+import { Lock, CheckCircle2, Flame, Timer, Zap, Eye, BarChart2, XCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface SeatMapProps {
@@ -10,6 +10,7 @@ interface SeatMapProps {
   heldBookingRef: string | null;
   holdExpiresAt: string | null;
   onHoldSeat: (seatCode: string) => void;
+  onCancelHold: () => void;
   onPaySeat: () => void;
   isHolding: boolean;
   showtimeId: string;
@@ -22,6 +23,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
   heldBookingRef,
   holdExpiresAt,
   onHoldSeat,
+  onCancelHold,
   onPaySeat,
   isHolding,
   showtimeId
@@ -272,13 +274,23 @@ export const SeatMap: React.FC<SeatMapProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onPaySeat}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-sm shadow-lg shadow-brand-500/30 transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Proceed to Payment (BDT 450)</span>
-          </button>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={onCancelHold}
+              className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white font-semibold text-xs border border-gray-700 flex items-center justify-center gap-1.5 transition"
+            >
+              <XCircle className="w-4 h-4 text-rose-400" />
+              <span>Cancel Hold</span>
+            </button>
+
+            <button
+              onClick={onPaySeat}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-sm shadow-lg shadow-brand-500/30 transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Proceed to Payment (BDT 450)</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

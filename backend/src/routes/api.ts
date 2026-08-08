@@ -5,6 +5,7 @@ import {
   getSeatMap,
   initiatePayment,
   handleGatewayCallback,
+  releaseSeatHold,
   getMockMovies,
   getMockShowtime,
   getMockBooking
@@ -15,7 +16,7 @@ import axios from 'axios';
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:9000';
 export const apiRouter = Router();
 
-// GET /api/metrics (BONUS TASK: Monitoring & Observability)
+// GET /api/metrics
 apiRouter.get('/metrics', async (_req: Request, res: Response) => {
   try {
     const holdsCountRes = await pool.query(`SELECT COUNT(*) FROM showtime_seats WHERE status = 'HELD'`).catch(() => ({ rows: [{ count: 0 }] }));
@@ -98,6 +99,21 @@ apiRouter.post('/showtimes/:id/hold', async (req: Request, res: Response) => {
     }
 
     res.status(201).json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/bookings/cancel (Manual User Hold Cancellation)
+apiRouter.post('/bookings/cancel', async (req: Request, res: Response) => {
+  try {
+    const { booking_ref } = req.body;
+    if (!booking_ref) {
+      return res.status(400).json({ error: 'booking_ref is required' });
+    }
+
+    const result = await releaseSeatHold(booking_ref);
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

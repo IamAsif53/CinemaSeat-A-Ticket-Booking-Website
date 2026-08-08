@@ -66,7 +66,6 @@ export function App() {
   // Handle Movie Selection Change
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie);
-    // Reset selected seat hold view
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
@@ -104,6 +103,25 @@ export function App() {
       }
     } finally {
       setIsHolding(false);
+    }
+  };
+
+  // Handle Manual Cancel Hold Request
+  const handleCancelHold = async () => {
+    if (!heldBookingRef || !showtime) return;
+
+    try {
+      await axios.post('/api/bookings/cancel', { booking_ref: heldBookingRef });
+      setToastMessage({ text: `Seat ${selectedSeatCode} hold cancelled. Returned to Available.`, type: 'success' });
+
+      setSelectedSeatCode(null);
+      setHeldBookingRef(null);
+      setHoldExpiresAt(null);
+
+      const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+      setSeats(seatsRes.data);
+    } catch (err: any) {
+      setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
     }
   };
 
@@ -148,6 +166,7 @@ export function App() {
             heldBookingRef={heldBookingRef}
             holdExpiresAt={holdExpiresAt}
             onHoldSeat={handleHoldSeat}
+            onCancelHold={handleCancelHold}
             onPaySeat={() => setShowPaymentModal(true)}
             isHolding={isHolding}
             showtimeId={showtime.id}

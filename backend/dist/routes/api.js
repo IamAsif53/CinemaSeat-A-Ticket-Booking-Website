@@ -11,7 +11,7 @@ const observability_js_1 = require("../middleware/observability.js");
 const axios_1 = __importDefault(require("axios"));
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:9000';
 exports.apiRouter = (0, express_1.Router)();
-// GET /api/metrics (BONUS TASK: Monitoring & Observability)
+// GET /api/metrics
 exports.apiRouter.get('/metrics', async (_req, res) => {
     try {
         const holdsCountRes = await index_js_1.pool.query(`SELECT COUNT(*) FROM showtime_seats WHERE status = 'HELD'`).catch(() => ({ rows: [{ count: 0 }] }));
@@ -87,6 +87,20 @@ exports.apiRouter.post('/showtimes/:id/hold', async (req, res) => {
             return res.status(409).json(result);
         }
         res.status(201).json(result);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// POST /api/bookings/cancel (Manual User Hold Cancellation)
+exports.apiRouter.post('/bookings/cancel', async (req, res) => {
+    try {
+        const { booking_ref } = req.body;
+        if (!booking_ref) {
+            return res.status(400).json({ error: 'booking_ref is required' });
+        }
+        const result = await (0, bookingService_js_1.releaseSeatHold)(booking_ref);
+        res.json(result);
     }
     catch (err) {
         res.status(500).json({ error: err.message });

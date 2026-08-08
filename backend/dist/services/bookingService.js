@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setMockMode = setMockMode;
 exports.holdSeat = holdSeat;
+exports.releaseSeatHold = releaseSeatHold;
 exports.getSeatMap = getSeatMap;
 exports.syncExpiredHolds = syncExpiredHolds;
 exports.initiatePayment = initiatePayment;
@@ -164,6 +165,58 @@ async function holdSeat(showtimeId, seatCode, userId) {
         client.release();
     }
 }
+/**
+ * Explicit User Release / Cancel Hold Feature
+ */
+async function releaseSeatHold(bookingRef) {
+    if (isMockMode) {
+        const bk = mockBookingsMap.get(bookingRef);
+        if (bk) {
+            bk.status = 'CANCELLED';
+            const s = mockSeatsMap.get(bk.seat_code);
+            if (s) {
+                s.status = 'AVAILABLE';
+                s.held_by_user_id = null;
+                s.hold_expires_at = null;
+                s.booking_ref = null;
+            }
+        }
+        return { success: true, message: 'Seat hold cancelled and returned to AVAILABLE' };
+    }
+    const client = await index_js_1.pool.connect();
+    try {
+        await client.query('BEGIN');
+        const bkRes = await client.query(`SELECT * FROM bookings WHERE booking_ref = $1 FOR UPDATE`, [bookingRef]);
+        if (bkRes.rows.length === 0) {
+            await client.query('COMMIT');
+            return { success: false, message: 'Booking not found' };
+        }
+        const booking = bkRes.rows[0];
+        if (booking.status === 'CONFIRMED') {
+            await client.query('COMMIT');
+            return { success: false, message: 'Cannot cancel a confirmed booking' };
+        }
+        // Update booking status
+        await client.query(`UPDATE bookings SET status = 'CANCELLED', updated_at = NOW() WHERE booking_ref = $1`, [bookingRef]);
+        // Update seat status back to AVAILABLE
+        await client.query(`UPDATE showtime_seats SET status = 'AVAILABLE', held_by_user_id = NULL, hold_expires_at = NULL, booking_ref = NULL, updated_at = NOW() WHERE showtime_id = $1 AND seat_id = $2`, [booking.showtime_id, booking.seat_id]);
+        // Delete Redis lock if present
+        const seatRes = await client.query(`SELECT seat_code FROM seats WHERE id = $1`, [booking.seat_id]);
+        if (seatRes.rows.length > 0) {
+            const redisKey = `seat_hold:${booking.showtime_id}:${seatRes.rows[0].seat_code}`;
+            await index_js_1.redis.del(redisKey);
+        }
+        await client.query('COMMIT');
+        return { success: true, message: 'Seat hold cancelled and returned to AVAILABLE' };
+    }
+    catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    }
+    finally {
+        client.release();
+    }
+}
 async function getSeatMap(showtimeId) {
     await syncExpiredHolds(showtimeId);
     if (isMockMode) {
@@ -219,7 +272,7 @@ async function initiatePayment(bookingRef, userPhone, headersMap = {}) {
         if (!bk)
             throw new Error('Booking not found');
         bk.user_phone = userPhone;
-        bk.status = 'CONFIRMED'; // Auto succeed in mock preview
+        bk.status = 'CONFIRMED';
         const s = mockSeatsMap.get(bk.seat_code);
         if (s)
             s.status = 'BOOKED';
