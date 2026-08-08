@@ -1,0 +1,12 @@
+{
+  "name": "cinemaseat-root",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:scenario-a": "node scripts/scenario-a.js",
+    "test:scenario-b": "node scripts/scenario-b.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9"
+  }
+}

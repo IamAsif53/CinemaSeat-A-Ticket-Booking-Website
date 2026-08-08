@@ -1,0 +1,176 @@
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { Navbar } from './components/Navbar';
+import { MovieHeader } from './components/MovieHeader';
+import { SeatMap } from './components/SeatMap';
+import { PaymentModal } from './components/PaymentModal';
+import { TicketReceiptModal } from './components/TicketReceiptModal';
+import { Movie, Showtime, Seat } from './types';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+
+export function App() {
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [showtime, setShowtime] = useState<Showtime | null>(null);
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [currentUserId] = useState<string>(() => `user_${Math.floor(Math.random() * 10000)}`);
+  
+  const [selectedSeatCode, setSelectedSeatCode] = useState<string | null>(null);
+  const [heldBookingRef, setHeldBookingRef] = useState<string | null>(null);
+  const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
+  
+  const [isHolding, setIsHolding] = useState<boolean>(false);
+  const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+  const [confirmedBookingRef, setConfirmedBookingRef] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
+
+  // Load Movies & Initial Showtime
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const mRes = await axios.get('/api/movies');
+        setMovies(mRes.data);
+        if (mRes.data.length > 0) {
+          setSelectedMovie(mRes.data[0]); // Spider-Man Premiere
+        }
+
+        const stRes = await axios.get('/api/showtimes/showtime-spiderman-8pm');
+        setShowtime(stRes.data);
+
+        const seatsRes = await axios.get('/api/showtimes/showtime-spiderman-8pm/seats');
+        setSeats(seatsRes.data);
+      } catch (err) {
+        console.error('Failed to load initial data:', err);
+      }
+    };
+    init();
+  }, []);
+
+  // Poll Seat Map every 3 seconds for live concurrency updates
+  useEffect(() => {
+    if (!showtime) return;
+
+    const fetchSeats = async () => {
+      try {
+        const res = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+        setSeats(res.data);
+      } catch (err) {
+        console.error('Error fetching seat map:', err);
+      }
+    };
+
+    const interval = setInterval(fetchSeats, 3000);
+    return () => clearInterval(interval);
+  }, [showtime]);
+
+  // Handle Seat Hold Request
+  const handleHoldSeat = async (seatCode: string) => {
+    if (!showtime || isHolding) return;
+
+    setIsHolding(true);
+    setToastMessage(null);
+
+    try {
+      const res = await axios.post(`/api/showtimes/${showtime.id}/hold`, {
+        seat_code: seatCode,
+        user_id: currentUserId
+      });
+
+      if (res.data.success) {
+        setSelectedSeatCode(seatCode);
+        setHeldBookingRef(res.data.booking_ref);
+        setHoldExpiresAt(res.data.hold_expires_at);
+        setToastMessage({ text: `Seat ${seatCode} held successfully!`, type: 'success' });
+
+        // Refresh seats map
+        const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+        setSeats(seatsRes.data);
+      }
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.response?.data?.error || `Failed to hold seat ${seatCode}`;
+      setToastMessage({ text: errMsg, type: 'error' });
+      
+      // Refresh seat map to show updated status
+      if (showtime) {
+        const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+        setSeats(seatsRes.data);
+      }
+    } finally {
+      setIsHolding(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-dark-900 text-gray-100 flex flex-col font-sans">
+      <Navbar />
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Toast Alert */}
+        {toastMessage && (
+          <div className={`mb-6 p-4 rounded-xl flex items-center justify-between text-sm font-semibold animate-fade-in ${
+            toastMessage.type === 'error' 
+              ? 'bg-rose-950/80 border border-rose-500/50 text-rose-300' 
+              : 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300'
+          }`}>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <span>{toastMessage.text}</span>
+            </div>
+            <button onClick={() => setToastMessage(null)} className="text-xs opacity-80 hover:opacity-100">
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Movie Header */}
+        {selectedMovie && showtime && (
+          <MovieHeader movie={selectedMovie} showtime={showtime} />
+        )}
+
+        {/* Live Seat Map */}
+        {showtime && (
+          <SeatMap
+            seats={seats}
+            currentUserId={currentUserId}
+            selectedSeatCode={selectedSeatCode}
+            heldBookingRef={heldBookingRef}
+            holdExpiresAt={holdExpiresAt}
+            onHoldSeat={handleHoldSeat}
+            onPaySeat={() => setShowPaymentModal(true)}
+            isHolding={isHolding}
+          />
+        )}
+      </main>
+
+      {/* Payment Modal */}
+      {showPaymentModal && heldBookingRef && selectedSeatCode && (
+        <PaymentModal
+          bookingRef={heldBookingRef}
+          seatCode={selectedSeatCode}
+          amount={showtime?.price_amount || 450}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={(ref) => {
+            setShowPaymentModal(false);
+            setConfirmedBookingRef(ref);
+            setHeldBookingRef(null);
+            setSelectedSeatCode(null);
+            setHoldExpiresAt(null);
+          }}
+        />
+      )}
+
+      {/* Ticket Receipt Modal */}
+      {confirmedBookingRef && (
+        <TicketReceiptModal
+          bookingRef={confirmedBookingRef}
+          onClose={() => setConfirmedBookingRef(null)}
+        />
+      )}
+
+      {/* Footer */}
+      <footer className="border-t border-gray-800 py-6 text-center text-xs text-gray-500">
+        <p>CinemaSeat — Zero to Production Phase 2 Hackathon Project</p>
+      </footer>
+    </div>
+  );
+}
