@@ -12,12 +12,14 @@ import { TicketReceiptModal } from './components/TicketReceiptModal';
 import { MyTicketsDrawer } from './components/MyTicketsDrawer';
 import { TrailerModal } from './components/TrailerModal';
 import { TelemetryWidget } from './components/TelemetryWidget';
+import { BranchSelectorModal, CINEMA_BRANCHES, CinemaBranch } from './components/BranchSelectorModal';
 import { Movie, Showtime, Seat, SnackItem, Booking } from './types';
 import { MovieFallback } from './data/fallbackMovies';
 import { AlertTriangle } from 'lucide-react';
 
 const BOOKED_SEATS_STORAGE_KEY = 'cinemaseat_persistent_booked_codes';
 const MY_TICKETS_STORAGE_KEY = 'cinemaseat_my_tickets';
+const BRANCH_STORAGE_KEY = 'cinemaseat_selected_branch';
 const CLOUD_SYNC_URL = 'https://jsonblob.com/api/jsonBlob/019fe0b1-ef87-76ed-a02e-d1ead4e15086';
 
 // Helper to load booked seat codes from localStorage
@@ -62,6 +64,15 @@ const saveMyTicket = (newTicket: Booking) => {
   } catch (e) {
     console.error('Failed to save ticket to wallet:', e);
   }
+};
+
+// Helper to get stored cinema branch
+const getStoredBranch = (): CinemaBranch => {
+  try {
+    const saved = localStorage.getItem(BRANCH_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return CINEMA_BRANCHES[0];
 };
 
 // Helper to fetch global cloud booked seats across all devices
@@ -130,6 +141,9 @@ export function App() {
   const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
   const [showTelemetryModal, setShowTelemetryModal] = useState<boolean>(false);
 
+  const [selectedBranch, setSelectedBranch] = useState<CinemaBranch>(() => getStoredBranch());
+  const [showBranchModal, setShowBranchModal] = useState<boolean>(false);
+
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const [isLiveBackend, setIsLiveBackend] = useState<boolean>(false);
 
@@ -195,6 +209,14 @@ export function App() {
       isMounted = false;
       clearInterval(interval);
     };
+  }, []);
+
+  const handleSelectBranch = useCallback((branch: CinemaBranch) => {
+    setSelectedBranch(branch);
+    try {
+      localStorage.setItem(BRANCH_STORAGE_KEY, JSON.stringify(branch));
+    } catch (e) {}
+    setToastMessage({ text: `📍 Cinema location updated to ${branch.name} (${branch.city})`, type: 'success' });
   }, []);
 
   // Handle Booking Action on any movie card
@@ -338,6 +360,8 @@ export function App() {
         onNavigateCatalog={() => { setViewMode('CATALOG'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
         onOpenTickets={() => setShowTicketDrawer(true)}
         onOpenTelemetry={() => setShowTelemetryModal(true)}
+        onOpenBranchModal={() => setShowBranchModal(true)}
+        selectedBranch={selectedBranch}
         ticketCount={myTickets.length}
       />
 
@@ -394,7 +418,11 @@ export function App() {
             <MovieHeader
               movies={movies}
               selectedMovie={selectedMovie}
-              showtime={showtime}
+              showtime={{
+                ...showtime,
+                theatre_name: selectedBranch.name,
+                screen_name: `${selectedBranch.name} — ${showtime.hall_name || 'Hall 1 (IMAX)'}`
+              }}
               onSelectMovie={setSelectedMovie}
             />
 
@@ -417,6 +445,14 @@ export function App() {
           </div>
         )}
       </main>
+
+      {/* Cinema Branch & City Switcher Modal */}
+      <BranchSelectorModal
+        isOpen={showBranchModal}
+        onClose={() => setShowBranchModal(false)}
+        selectedBranch={selectedBranch}
+        onSelectBranch={handleSelectBranch}
+      />
 
       {/* Digital Ticket Wallet Drawer */}
       <MyTicketsDrawer
@@ -478,7 +514,7 @@ export function App() {
                 amount: totalCheckoutAmount,
                 status: 'CONFIRMED',
                 movie_title: selectedMovie?.title || 'Spider-Man: Brand New Day',
-                screen_name: showtime?.screen_name || 'Grand Hall IMAX 1',
+                screen_name: `${selectedBranch.name} — Hall 1 (IMAX)`,
                 created_at: new Date().toISOString(),
                 snacks: selectedSnacks
               };

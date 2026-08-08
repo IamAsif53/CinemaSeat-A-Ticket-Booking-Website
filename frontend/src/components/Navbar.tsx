@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Film, Activity, Clock, ArrowLeft, Home, Compass, Ticket, BarChart2 } from 'lucide-react';
+import { Film, Activity, Clock, ArrowLeft, Home, Compass, Ticket, BarChart2, MapPin } from 'lucide-react';
 import axios from 'axios';
+import { CinemaBranch } from './BranchSelectorModal';
 
 interface NavbarProps {
   viewMode?: 'HOME' | 'CATALOG' | 'BOOKING';
@@ -8,6 +9,8 @@ interface NavbarProps {
   onNavigateCatalog?: () => void;
   onOpenTickets?: () => void;
   onOpenTelemetry?: () => void;
+  onOpenBranchModal?: () => void;
+  selectedBranch?: CinemaBranch;
   ticketCount?: number;
 }
 
@@ -17,6 +20,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateCatalog,
   onOpenTickets,
   onOpenTelemetry,
+  onOpenBranchModal,
+  selectedBranch,
   ticketCount = 0
 }) => {
   const [healthStatus, setHealthStatus] = useState<'UP' | 'DOWN' | 'CHECKING'>('CHECKING');
@@ -43,8 +48,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-2 sm:gap-6">
+        {/* Brand Logo & Location Switcher */}
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
             onClick={onNavigateHome}
             className="flex items-center gap-2.5 text-left focus:outline-none"
@@ -65,8 +70,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </button>
 
+          {/* Location / Cinema Branch Switcher Button */}
+          {onOpenBranchModal && selectedBranch && (
+            <button
+              onClick={onOpenBranchModal}
+              className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-700 text-gray-200 font-bold text-[11px] sm:text-xs border border-gray-700 flex items-center gap-1.5 transition shrink-0"
+              title="Change Cinema Branch & City"
+            >
+              <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="font-extrabold text-amber-300 hidden sm:inline">{selectedBranch.city}:</span>
+              <span className="truncate max-w-[110px] sm:max-w-[160px]">{selectedBranch.name}</span>
+            </button>
+          )}
+
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1 text-xs">
+          <nav className="hidden lg:flex items-center gap-1 text-xs">
             <button
               onClick={onNavigateHome}
               className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition ${
@@ -133,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div className="flex items-center gap-1.5 sm:gap-2 bg-dark-800/80 px-2.5 py-1.5 sm:px-3 rounded-lg border border-gray-800 text-[11px] sm:text-xs">
             <Activity className="w-3.5 h-3.5 text-brand-400" />
-            <span className="text-gray-400 hidden lg:inline">System Health:</span>
+            <span className="text-gray-400 hidden xl:inline">System Health:</span>
             {healthStatus === 'UP' ? (
               <span className="flex items-center gap-1 font-semibold text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
