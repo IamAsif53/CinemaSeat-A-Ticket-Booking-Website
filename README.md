@@ -3,6 +3,8 @@
 > **Zero to Production · Phase 2 Hackathon Project**  
 > *When Everyone Wants the Same Seat*
 
+**Repository URL:** [https://github.com/IamAsif53/CinemaSeat-A-Ticket-Booking-Website.git](https://github.com/IamAsif53/CinemaSeat-A-Ticket-Booking-Website.git)
+
 CinemaSeat is a high-concurrency, fault-tolerant movie ticketing platform built to remain completely responsive under extreme premiere rush traffic and **guarantee zero double-booking** under heavy demand.
 
 ---
@@ -53,8 +55,8 @@ flowchart LR
 ### Local Development / Evaluation
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/cinemaseat.git
-cd cinemaseat
+git clone https://github.com/IamAsif53/CinemaSeat-A-Ticket-Booking-Website.git
+cd CinemaSeat-A-Ticket-Booking-Website
 
 # 2. Run full containerized stack
 docker compose up --build
@@ -63,6 +65,7 @@ docker compose up --build
 Access endpoints:
 - **Web UI & Reverse Proxy:** `http://localhost` (Port 80)
 - **Health Check Hook:** `http://localhost/health`
+- **Metrics Endpoint:** `http://localhost/api/metrics`
 - **API Base URL:** `http://localhost/api`
 
 ### Cloud Deployment (Poridhi VM / AWS)
@@ -72,8 +75,8 @@ Access endpoints:
    ```
 2. Clone repository & bring up containers in background:
    ```bash
-   git clone https://github.com/your-username/cinemaseat.git
-   cd cinemaseat
+   git clone https://github.com/IamAsif53/CinemaSeat-A-Ticket-Booking-Website.git
+   cd CinemaSeat-A-Ticket-Booking-Website
    docker compose up -d --build
    ```
 3. Deployed URL: `http://<VM_IP_ADDRESS>`
