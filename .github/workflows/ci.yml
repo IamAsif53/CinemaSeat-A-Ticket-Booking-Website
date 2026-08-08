@@ -103,6 +103,10 @@ jobs:
         run: |
           TARGET_URL=http://localhost node scripts/scenario-b.js
 
+      - name: Run Scenario C Test (Peak Traffic Load & Graceful Degradation)
+        run: |
+          TARGET_URL=http://localhost node scripts/scenario-c.js
+
       - name: Shutdown Docker Compose
         if: always()
         run: |
@@ -126,6 +130,6 @@ jobs:
           echo "Branch: ${{ github.ref }}"
           echo "Commit: ${{ github.sha }}"
           echo "================================================================"
-          echo "✅ All CI checks passed (TypeCheck, Build, Scenario A & B Tests)."
+          echo "✅ All CI checks passed (TypeCheck, Build, Scenario A, B & C Tests)."
           echo "✅ Production services kept reachable during rolling deployment."
           echo "✅ Deployed to live environment: https://github.com/IamAsif53/CinemaSeat-A-Ticket-Booking-Website"

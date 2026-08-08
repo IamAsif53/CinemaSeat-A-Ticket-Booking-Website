@@ -6,7 +6,7 @@ import { seedDb } from './db/seed.js';
 import { getHoldTTL } from './db/index.js';
 import { syncExpiredHolds, setMockMode } from './services/bookingService.js';
 import { runPaymentRecoveryWorker } from './workers/paymentRecoveryWorker.js';
-import { requestTracingMiddleware } from './middleware/observability.js';
+import { requestTracingMiddleware, getMetricsData } from './middleware/observability.js';
 import { rateLimiterMiddleware } from './middleware/rateLimiter.js';
 
 dotenv.config();
@@ -29,6 +29,11 @@ app.get('/health', (_req: Request, res: Response) => {
     service: 'CinemaSeat API',
     hold_ttl_seconds: getHoldTTL()
   });
+});
+
+// BONUS TASK: Metrics Endpoint
+app.get('/metrics', (_req: Request, res: Response) => {
+  res.status(200).json(getMetricsData());
 });
 
 app.use('/api', apiRouter);

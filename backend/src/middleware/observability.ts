@@ -21,6 +21,21 @@ export const metrics: MetricsStore = {
   startTime: new Date().toISOString()
 };
 
+export function getMetricsData() {
+  const uptimeSeconds = Math.floor((Date.now() - new Date(metrics.startTime).getTime()) / 1000);
+  return {
+    status: 'UP',
+    service: 'CinemaSeat API',
+    timestamp: new Date().toISOString(),
+    uptime_seconds: uptimeSeconds,
+    total_requests: metrics.totalRequests,
+    successful_requests: metrics.successfulRequests,
+    conflict_counts_409: metrics.conflictCounts,
+    error_counts_500: metrics.errorCounts,
+    memory_usage_mb: Math.round((process.memoryUsage().heapUsed / 1024 / 1024) * 100) / 100
+  };
+}
+
 /**
  * Request ID Tracing & Structured Logging Middleware
  */

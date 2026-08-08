@@ -11,9 +11,15 @@ import {
 } from '../services/bookingService.js';
 import { sendOTP, verifyOTP, isValidBDPhoneNumber } from '../services/otpService.js';
 import { getMovieReviews, addMovieReview } from '../services/reviewService.js';
+import { getMetricsData } from '../middleware/observability.js';
 import { pool, redis } from '../db/index.js';
 
 export const apiRouter = Router();
+
+// BONUS TASK: Metrics Endpoint
+apiRouter.get('/metrics', (_req: Request, res: Response) => {
+  res.status(200).json(getMetricsData());
+});
 
 // GET /api/movies
 apiRouter.get('/movies', async (req: Request, res: Response) => {

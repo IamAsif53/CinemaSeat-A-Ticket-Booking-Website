@@ -30,6 +30,10 @@ app.get('/health', (_req, res) => {
         hold_ttl_seconds: (0, index_js_1.getHoldTTL)()
     });
 });
+// BONUS TASK: Metrics Endpoint
+app.get('/metrics', (_req, res) => {
+    res.status(200).json((0, observability_js_1.getMetricsData)());
+});
 app.use('/api', api_js_1.apiRouter);
 // Background timer to automatically sync expired seat holds from Postgres
 setInterval(() => {

@@ -5,8 +5,13 @@ const express_1 = require("express");
 const bookingService_js_1 = require("../services/bookingService.js");
 const otpService_js_1 = require("../services/otpService.js");
 const reviewService_js_1 = require("../services/reviewService.js");
+const observability_js_1 = require("../middleware/observability.js");
 const index_js_1 = require("../db/index.js");
 exports.apiRouter = (0, express_1.Router)();
+// BONUS TASK: Metrics Endpoint
+exports.apiRouter.get('/metrics', (_req, res) => {
+    res.status(200).json((0, observability_js_1.getMetricsData)());
+});
 // GET /api/movies
 exports.apiRouter.get('/movies', async (req, res) => {
     try {
