@@ -57,7 +57,7 @@ export function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // SMART POLLING: Only update seats state if seat data actually changed to prevent DOM flickering/glitching!
+  // SMART POLLING: Only update seats state if seat data actually changed to prevent DOM flickering!
   useEffect(() => {
     if (!showtime || viewMode !== 'BOOKING') return;
 
@@ -114,7 +114,7 @@ export function App() {
         setSelectedSeatCode(seatCode);
         setHeldBookingRef(res.data.booking_ref);
         setHoldExpiresAt(res.data.hold_expires_at);
-        setToastMessage({ text: `Seat ${seatCode} held successfully!`, type: 'success' });
+        setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
 
         const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
         setSeats(seatsRes.data);
@@ -150,6 +150,27 @@ export function App() {
       setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
     }
   }, [heldBookingRef, showtime, selectedSeatCode]);
+
+  // Handle Automatic Hold Expiration (Scenario B Requirement)
+  const handleHoldExpired = useCallback(async () => {
+    if (!selectedSeatCode) return;
+    const seatCode = selectedSeatCode;
+
+    setSelectedSeatCode(null);
+    setHeldBookingRef(null);
+    setHoldExpiresAt(null);
+    setShowPaymentModal(false);
+
+    setToastMessage({
+      text: `⏰ Hold for seat ${seatCode} has expired! Seat released back to Available.`,
+      type: 'error'
+    });
+
+    if (showtime) {
+      const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
+      setSeats(seatsRes.data);
+    }
+  }, [selectedSeatCode, showtime]);
 
   const featuredMovie = movies.find(m => m.id === 'movie-spiderman') || movies[0];
 
@@ -204,6 +225,7 @@ export function App() {
               holdExpiresAt={holdExpiresAt}
               onHoldSeat={handleHoldSeat}
               onCancelHold={handleCancelHold}
+              onHoldExpired={handleHoldExpired}
               onPaySeat={() => setShowPaymentModal(true)}
               isHolding={isHolding}
               showtimeId={showtime.id}

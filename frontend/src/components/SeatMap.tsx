@@ -11,6 +11,7 @@ interface SeatMapProps {
   holdExpiresAt: string | null;
   onHoldSeat: (seatCode: string) => void;
   onCancelHold: () => void;
+  onHoldExpired: () => void;
   onPaySeat: () => void;
   isHolding: boolean;
   showtimeId: string;
@@ -24,6 +25,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
   holdExpiresAt,
   onHoldSeat,
   onCancelHold,
+  onHoldExpired,
   onPaySeat,
   isHolding,
   showtimeId
@@ -39,7 +41,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
     durationMs: number;
   } | null>(null);
 
-  // Live countdown timer for held seat
+  // Live countdown timer for held seat (Automatically expires when reaching 0s)
   useEffect(() => {
     if (!holdExpiresAt) {
       setTimeLeft(null);
@@ -47,14 +49,19 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
     }
 
     const updateTimer = () => {
-      const diff = Math.max(0, Math.floor((new Date(holdExpiresAt).getTime() - Date.now()) / 1000));
-      setTimeLeft(diff);
+      const diff = Math.floor((new Date(holdExpiresAt).getTime() - Date.now()) / 1000);
+      if (diff <= 0) {
+        setTimeLeft(0);
+        onHoldExpired();
+      } else {
+        setTimeLeft(diff);
+      }
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [holdExpiresAt]);
+  }, [holdExpiresAt, onHoldExpired]);
 
   // Handle In-Browser 100-User Rush Simulation (WOW Feature for Judges)
   const handleSimulate100Rush = async () => {
@@ -148,7 +155,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
         </div>
       )}
 
-      {/* Seat Hover Preview Tooltip Box (Fixed Height Container to prevent layout shift) */}
+      {/* Seat Hover Preview Tooltip Box */}
       <div className="h-12 mb-4">
         {hoveredSeat ? (
           <div className="h-full p-3 rounded-xl bg-dark-800/90 border border-brand-500/30 text-xs flex items-center justify-between transition-all duration-200">
@@ -260,12 +267,12 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
         </div>
       </div>
 
-      {/* Action Footer Bar */}
-      {heldBookingRef && (
+      {/* Action Footer Bar (Only rendered when hold is active and timeLeft > 0) */}
+      {heldBookingRef && timeLeft !== null && timeLeft > 0 && (
         <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-brand-950/80 to-dark-800 border border-brand-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-brand-600/20 text-brand-400 border border-brand-500/30">
-              <Timer className="w-5 h-5" />
+              <Timer className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -275,7 +282,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
                 </span>
               </div>
               <p className="text-xs text-gray-300">
-                Hold expires in: <strong className="text-brand-400">{timeLeft !== null ? `${timeLeft}s` : '...'}</strong>
+                Hold expires in: <strong className="text-brand-400 font-mono text-sm">{timeLeft}s</strong>
               </p>
             </div>
           </div>
