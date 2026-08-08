@@ -4,6 +4,7 @@ exports.apiRouter = void 0;
 const express_1 = require("express");
 const bookingService_js_1 = require("../services/bookingService.js");
 const otpService_js_1 = require("../services/otpService.js");
+const reviewService_js_1 = require("../services/reviewService.js");
 const index_js_1 = require("../db/index.js");
 exports.apiRouter = (0, express_1.Router)();
 // GET /api/movies
@@ -17,6 +18,32 @@ exports.apiRouter.get('/movies', async (req, res) => {
     }
     catch (err) {
         res.json((0, bookingService_js_1.getMockMovies)());
+    }
+});
+// GET /api/movies/:id/reviews
+exports.apiRouter.get('/movies/:id/reviews', (req, res) => {
+    try {
+        const { id } = req.params;
+        const stats = (0, reviewService_js_1.getMovieReviews)(id);
+        res.json(stats);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// POST /api/movies/:id/reviews
+exports.apiRouter.post('/movies/:id/reviews', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { author_name, rating, comment } = req.body;
+        if (!rating || !comment) {
+            return res.status(400).json({ error: 'rating and comment are required' });
+        }
+        const result = (0, reviewService_js_1.addMovieReview)(id, author_name || 'Anonymous Moviegoer', Number(rating), comment);
+        res.status(201).json(result);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 // GET /api/showtimes/:id

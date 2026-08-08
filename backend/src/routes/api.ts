@@ -10,6 +10,7 @@ import {
   releaseSeatHold
 } from '../services/bookingService.js';
 import { sendOTP, verifyOTP, isValidBDPhoneNumber } from '../services/otpService.js';
+import { getMovieReviews, addMovieReview } from '../services/reviewService.js';
 import { pool, redis } from '../db/index.js';
 
 export const apiRouter = Router();
@@ -24,6 +25,34 @@ apiRouter.get('/movies', async (req: Request, res: Response) => {
     res.json(getMockMovies());
   } catch (err) {
     res.json(getMockMovies());
+  }
+});
+
+// GET /api/movies/:id/reviews
+apiRouter.get('/movies/:id/reviews', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const stats = getMovieReviews(id);
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/movies/:id/reviews
+apiRouter.post('/movies/:id/reviews', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { author_name, rating, comment } = req.body;
+
+    if (!rating || !comment) {
+      return res.status(400).json({ error: 'rating and comment are required' });
+    }
+
+    const result = addMovieReview(id, author_name || 'Anonymous Moviegoer', Number(rating), comment);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
