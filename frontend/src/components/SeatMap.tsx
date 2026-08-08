@@ -103,11 +103,14 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
     setSimulatingRush(false);
   };
 
-  // Group seats by row
-  const rows = Array.from(new Set(seats.map(s => s.row_label))).sort();
+  // Group seats by row (extracts row letter from row_label OR seat_code[0])
+  const getRowLabel = (seat: Seat) => seat.row_label || (seat.seat_code ? seat.seat_code[0] : 'A');
+  const getSeatNumber = (seat: Seat) => seat.seat_number || (seat.seat_code ? parseInt(seat.seat_code.substring(1), 10) : 1);
+
+  const rows = Array.from(new Set(seats.map(getRowLabel))).sort();
 
   const getSeatViewQuality = (seatCode: string) => {
-    if (seatCode === 'F12') return { tag: '🔥 PRIME IMAX CENTER', desc: 'Optimal 4K viewing angle & Dolby Atmos sweet spot' };
+    if (seatCode === 'F12' || seatCode === 'C4' || seatCode === 'C5') return { tag: '🔥 PRIME CENTER', desc: 'Optimal 4K viewing angle & Dolby Atmos sweet spot' };
     if (['E', 'F'].includes(seatCode[0])) return { tag: '⭐ VIP Back Row', desc: 'Extra legroom & elevated screen view' };
     if (['C', 'D'].includes(seatCode[0])) return { tag: '🎬 Standard Center', desc: 'Great balanced viewing distance' };
     return { tag: '👁️ Front Row', desc: 'Immersive close-up cinematic experience' };
@@ -198,32 +201,32 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
 
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300">
           <Flame className="w-3.5 h-3.5 text-amber-400" />
-          <span>Seat <strong>F12</strong> is the Prime Premiere Seat!</span>
+          <span>Seat <strong>C4 / C5</strong> is Prime Viewing Center!</span>
         </div>
       </div>
 
       {/* Screen Curved Header */}
-      <div className="w-full mb-12 flex flex-col items-center">
+      <div className="w-full mb-10 flex flex-col items-center">
         <div className="w-3/4 sm:w-1/2 h-3 rounded-t-full cinema-screen mb-2"></div>
         <span className="text-[11px] uppercase tracking-widest font-extrabold text-gray-500">
           CURVED 4K IMAX SCREEN
         </span>
       </div>
 
-      {/* Seat Grid */}
+      {/* Seat Grid - Rendered in Rows & Columns */}
       <div className="overflow-x-auto pb-4">
-        <div className="min-w-[680px] flex flex-col items-center gap-3">
+        <div className="min-w-[640px] flex flex-col items-center gap-3">
           {rows.map(row => {
             const rowSeats = seats
-              .filter(s => s.row_label === row)
-              .sort((a, b) => a.seat_number - b.seat_number);
+              .filter(s => getRowLabel(s) === row)
+              .sort((a, b) => getSeatNumber(a) - getSeatNumber(b));
 
             return (
               <div key={row} className="flex items-center gap-3">
-                <span className="w-6 text-center font-bold text-xs text-gray-500">{row}</span>
-                <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-6 text-center font-extrabold text-xs text-brand-400">{row}</span>
+                <div className="flex items-center gap-2 sm:gap-3">
                   {rowSeats.map(seat => {
-                    const isF12 = seat.seat_code === 'F12';
+                    const isPrime = seat.seat_code === 'C4' || seat.seat_code === 'C5' || seat.seat_code === 'F12';
                     const isHeldByMe = seat.status === 'HELD' && seat.held_by_user_id === currentUserId;
                     const isHeldByOther = seat.status === 'HELD' && !isHeldByMe;
                     const isBooked = seat.status === 'BOOKED';
@@ -247,11 +250,11 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
                         onClick={() => onHoldSeat(seat.seat_code)}
                         onMouseEnter={() => setHoveredSeat(seat)}
                         onMouseLeave={() => setHoveredSeat(null)}
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg border flex flex-col items-center justify-center text-xs transition-all duration-150 relative group ${bgClass}`}
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex flex-col items-center justify-center text-xs transition-all duration-150 relative group font-sans ${bgClass}`}
                       >
-                        <span className="font-semibold">{seat.seat_code}</span>
-                        {isF12 && !isBooked && (
-                          <span className="absolute -top-1 -right-1 w-2 rounded-full bg-amber-400"></span>
+                        <span className="font-bold">{seat.seat_code}</span>
+                        {isPrime && !isBooked && (
+                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 shadow"></span>
                         )}
                         {isHeldByOther && (
                           <Lock className="w-2.5 h-2.5 text-amber-400 absolute bottom-0.5" />
@@ -260,7 +263,7 @@ export const SeatMap: React.FC<SeatMapProps> = memo(({
                     );
                   })}
                 </div>
-                <span className="w-6 text-center font-bold text-xs text-gray-500">{row}</span>
+                <span className="w-6 text-center font-extrabold text-xs text-brand-400">{row}</span>
               </div>
             );
           })}
