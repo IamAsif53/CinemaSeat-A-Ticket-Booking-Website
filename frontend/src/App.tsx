@@ -303,7 +303,27 @@ export function App() {
     }, 400);
   }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef]);
 
-  // Handle Manual Cancel Hold Request (Releases ALL held seats for current user)
+  // Handle Single Seat Release Request
+  const handleReleaseSingleSeat = useCallback((seatCode: string) => {
+    setSeats(prev => {
+      const updated: Seat[] = prev.map(s => (s.seat_code === seatCode && s.held_by_user_id === currentUserId) ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s);
+      const remainingMyHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
+      const remainingCodes = remainingMyHeld.map(s => s.seat_code).join(', ');
+
+      if (remainingMyHeld.length === 0) {
+        setSelectedSeatCode(null);
+        setHeldBookingRef(null);
+        setHoldExpiresAt(null);
+        setToastMessage({ text: `Released Seat ${seatCode}. All seat holds cleared.`, type: 'success' });
+      } else {
+        setSelectedSeatCode(remainingCodes);
+        setToastMessage({ text: `Removed Seat ${seatCode}. Remaining held seats (${remainingMyHeld.length}): ${remainingCodes}`, type: 'success' });
+      }
+      return updated;
+    });
+  }, [currentUserId]);
+
+  // Handle Manual Cancel Hold Request (Releases ALL held seats for current user at once!)
   const handleCancelHold = useCallback(async () => {
     if (!showtime) return;
 
@@ -315,9 +335,9 @@ export function App() {
       }
     }
 
-    // Release all seats held by currentUserId
+    // Atomic release of ALL seats held by currentUserId
     setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s));
-    setToastMessage({ text: `Seat holds cancelled. All seats returned to Available.`, type: 'success' });
+    setToastMessage({ text: `All seat holds cancelled! All seats returned to Available.`, type: 'success' });
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
@@ -423,6 +443,7 @@ export function App() {
               heldBookingRef={heldBookingRef}
               holdExpiresAt={holdExpiresAt}
               onHoldSeat={handleHoldSeat}
+              onReleaseSingleSeat={handleReleaseSingleSeat}
               onCancelHold={handleCancelHold}
               onHoldExpired={handleHoldExpired}
               onPaySeat={(totalPrice, displayLabel) => {
