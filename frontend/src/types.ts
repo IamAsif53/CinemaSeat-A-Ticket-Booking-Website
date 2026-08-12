@@ -25,6 +25,7 @@ export interface Showtime {
   rating?: string;
   theatre_name?: string;
   location?: string;
+  hall_name?: string;
 }
 
 export interface Seat {

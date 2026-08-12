@@ -116,7 +116,7 @@ export function App() {
   const [seats, setSeats] = useState<Seat[]>(() => {
     const initialSeats = MovieFallback.getInitialSeats();
     const storedBooked = getStoredBookedSeatCodes();
-    return initialSeats.map(s => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s);
+    return initialSeats.map(s => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null } : s);
   });
   
   const seatsRef = useRef<Seat[]>(seats);
@@ -169,7 +169,7 @@ export function App() {
         if (!isMounted) return;
         if (seatsRes.data && Array.isArray(seatsRes.data)) {
           const storedBooked = getStoredBookedSeatCodes();
-          const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+          const merged: Seat[] = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' as const } : s);
           setSeats(merged);
         }
       } catch (err) {
@@ -192,10 +192,10 @@ export function App() {
 
       setSeats(prevSeats => {
         let changed = false;
-        const updated = prevSeats.map(s => {
+        const updated: Seat[] = prevSeats.map(s => {
           if (combinedBooked.includes(s.seat_code) && s.status !== 'BOOKED') {
             changed = true;
-            return { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null };
+            return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
           }
           return s;
         });
@@ -252,7 +252,7 @@ export function App() {
         if (res.data.success) {
           const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
           const storedBooked = getStoredBookedSeatCodes();
-          const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+          const merged: Seat[] = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' as const } : s);
           
           setSeats(merged);
 
@@ -283,7 +283,7 @@ export function App() {
       const expires = new Date(Date.now() + 60000).toISOString();
 
       setSeats(prev => {
-        const updated = prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD', held_by_user_id: currentUserId, hold_expires_at: expires } : s);
+        const updated: Seat[] = prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD' as const, held_by_user_id: currentUserId, hold_expires_at: expires } : s);
         const myHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
         const heldCodes = myHeld.map(s => s.seat_code).join(', ');
         
@@ -316,7 +316,7 @@ export function App() {
     }
 
     // Release all seats held by currentUserId
-    setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
+    setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s));
     setToastMessage({ text: `Seat holds cancelled. All seats returned to Available.`, type: 'success' });
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
@@ -326,7 +326,7 @@ export function App() {
 
   // Handle Automatic Hold Expiration
   const handleHoldExpired = useCallback(async () => {
-    setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
+    setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s));
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
@@ -411,7 +411,7 @@ export function App() {
               showtime={{
                 ...showtime,
                 theatre_name: selectedBranch.name,
-                screen_name: `${selectedBranch.name} — ${showtime.hall_name || 'Hall 1 (IMAX)'}`
+                screen_name: `${selectedBranch.name} — Hall 1 (IMAX)`
               }}
               onSelectMovie={setSelectedMovie}
             />
@@ -503,7 +503,7 @@ export function App() {
               syncBookedSeatToCloud(code);
             });
 
-            setSeats(prev => prev.map(s => (targetCodes.includes(s.seat_code) || (s.status === 'HELD' && s.held_by_user_id === currentUserId)) ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
+            setSeats(prev => prev.map(s => (targetCodes.includes(s.seat_code) || (s.status === 'HELD' && s.held_by_user_id === currentUserId)) ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null } : s));
 
             // Save confirmed multi-ticket object to Digital Wallet
             const ticketObj: Booking = {
