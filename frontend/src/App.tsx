@@ -28,6 +28,20 @@ interface BranchHoldState {
   expiresAt: string;
 }
 
+interface CloudHold {
+  key: string;
+  seat_code: string;
+  branch_id: string;
+  showtime_id: string;
+  user_id: string;
+  expires_at: string;
+}
+
+interface CloudState {
+  booked: string[];
+  holds: CloudHold[];
+}
+
 // Helper to construct location & showtime scoped seat key
 const getScopedSeatKey = (branchId: string, showtimeId: string, seatCode: string) => {
   return `${branchId || 'theatre-cuet'}:${showtimeId || 'showtime-spiderman-8pm'}:${seatCode}`;
@@ -86,35 +100,73 @@ const getStoredBranch = (): CinemaBranch => {
   return CINEMA_BRANCHES[0];
 };
 
-// Helper to fetch global cloud booked seats across all devices
-const fetchCloudBookedSeats = async (): Promise<string[]> => {
+// Fetch complete Cloud State (Booked seats + Active Holds across all devices)
+const fetchCloudState = async (): Promise<CloudState> => {
   try {
     const res = await axios.get(CLOUD_SYNC_URL, { timeout: 3000 });
-    if (res.data && Array.isArray(res.data.booked)) {
-      return res.data.booked;
+    if (res.data) {
+      const booked = Array.isArray(res.data.booked) ? res.data.booked : [];
+      const rawHolds = Array.isArray(res.data.holds) ? res.data.holds : [];
+      const now = new Date().toISOString();
+      const validHolds = rawHolds.filter((h: CloudHold) => h.expires_at > now);
+      return { booked, holds: validHolds };
     }
   } catch (err) {
     console.log('Cloud sync fetch fallback');
   }
-  return [];
+  return { booked: [], holds: [] };
 };
 
-// Helper to sync booked seat key to global cloud store
-const syncBookedSeatToCloud = async (codeKey: string) => {
+// Add seat holds to Cloud State for multi-device locking
+const addCloudHold = async (holdItems: CloudHold[]) => {
   try {
-    const currentLocal = getStoredBookedSeatCodes();
-    const cloudList = await fetchCloudBookedSeats();
+    const cloud = await fetchCloudState();
+    const existingKeys = holdItems.map(h => h.key);
+    const updatedHolds = [...cloud.holds.filter(h => !existingKeys.includes(h.key)), ...holdItems];
     
-    // Combine local and cloud seats uniquely
-    const combined = Array.from(new Set([...currentLocal, ...cloudList, codeKey]));
-    
-    // Update local storage
-    localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(combined));
+    await axios.put(CLOUD_SYNC_URL, {
+      booked: cloud.booked,
+      holds: updatedHolds
+    }, { timeout: 4000 });
+  } catch (e) {
+    console.error('Failed to add cloud hold:', e);
+  }
+};
 
-    // Update cloud store for multi-device sync (Phone <-> Laptop)
-    await axios.put(CLOUD_SYNC_URL, { booked: combined }, { timeout: 4000 });
-  } catch (err) {
-    console.error('Failed to sync seat to cloud:', err);
+// Remove seat holds from Cloud State
+const removeCloudHold = async (user_id: string, seatKeysToRemove?: string[]) => {
+  try {
+    const cloud = await fetchCloudState();
+    let updatedHolds = cloud.holds;
+    if (seatKeysToRemove && seatKeysToRemove.length > 0) {
+      updatedHolds = cloud.holds.filter(h => !seatKeysToRemove.includes(h.key));
+    } else {
+      updatedHolds = cloud.holds.filter(h => h.user_id !== user_id);
+    }
+    await axios.put(CLOUD_SYNC_URL, {
+      booked: cloud.booked,
+      holds: updatedHolds
+    }, { timeout: 4000 });
+  } catch (e) {
+    console.error('Failed to remove cloud hold:', e);
+  }
+};
+
+// Convert seat holds to confirmed booked in Cloud State
+const confirmCloudBookings = async (confirmedKeys: string[], user_id: string) => {
+  try {
+    const cloud = await fetchCloudState();
+    const localBooked = getStoredBookedSeatCodes();
+    const combinedBooked = Array.from(new Set([...cloud.booked, ...localBooked, ...confirmedKeys]));
+    const updatedHolds = cloud.holds.filter(h => !confirmedKeys.includes(h.key) && h.user_id !== user_id);
+
+    localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(combinedBooked));
+    await axios.put(CLOUD_SYNC_URL, {
+      booked: combinedBooked,
+      holds: updatedHolds
+    }, { timeout: 4000 });
+  } catch (e) {
+    console.error('Failed to confirm cloud bookings:', e);
   }
 };
 
@@ -215,38 +267,70 @@ export function App() {
     return () => { isMounted = false; };
   }, [selectedBranch.id, showtime?.id, branchHoldsStore, currentUserId]);
 
-  // MULTI-DEVICE CLOUD POLLER: Synchronize booked seats across Phone <-> Laptop in real-time!
+  // MULTI-DEVICE CLOUD REAL-TIME CONCURRENCY POLLER: Synchronizes holds & bookings across Phone <-> Laptop!
   useEffect(() => {
     let isMounted = true;
     const syncSeatsAcrossDevices = async () => {
-      const cloudSeats = await fetchCloudBookedSeats();
+      const cloud = await fetchCloudState();
       const localSeats = getStoredBookedSeatCodes();
-      const combinedBooked = Array.from(new Set([...cloudSeats, ...localSeats]));
+      const combinedBooked = Array.from(new Set([...cloud.booked, ...localSeats]));
 
       if (!isMounted) return;
 
+      const stId = showtime?.id || 'showtime-spiderman-8pm';
+
       setSeats(prevSeats => {
         let changed = false;
-        const stId = showtime?.id || 'showtime-spiderman-8pm';
         const updated: Seat[] = prevSeats.map(s => {
           const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
-          if (combinedBooked.includes(key) && s.status !== 'BOOKED') {
-            changed = true;
-            return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
+
+          // 1. Check if booked globally
+          if (combinedBooked.includes(key)) {
+            if (s.status !== 'BOOKED') {
+              changed = true;
+              return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
+            }
+            return s;
           }
+
+          // 2. Check if held globally in cloud (Phone or Laptop)
+          const activeCloudHold = cloud.holds.find(h => h.key === key);
+          if (activeCloudHold) {
+            const isMyHold = activeCloudHold.user_id === currentUserId;
+            const targetUserId = isMyHold ? currentUserId : activeCloudHold.user_id;
+
+            if (s.status !== 'HELD' || s.held_by_user_id !== targetUserId) {
+              changed = true;
+              return {
+                ...s,
+                status: 'HELD' as const,
+                held_by_user_id: targetUserId,
+                hold_expires_at: activeCloudHold.expires_at
+              };
+            }
+            return s;
+          }
+
+          // 3. If seat was held by someone else, but hold expired or released in cloud
+          if (s.status === 'HELD' && s.held_by_user_id !== currentUserId) {
+            changed = true;
+            return { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null };
+          }
+
           return s;
         });
+
         return changed ? updated : prevSeats;
       });
     };
 
     syncSeatsAcrossDevices();
-    const interval = setInterval(syncSeatsAcrossDevices, 3000);
+    const interval = setInterval(syncSeatsAcrossDevices, 1500); // 1.5 second high-frequency concurrency polling
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [selectedBranch.id, showtime?.id]);
+  }, [selectedBranch.id, showtime?.id, currentUserId]);
 
   // Switch Cinema Branch / Location — Preserves Held Seats Per Location Seamlessly!
   const handleSelectBranch = useCallback((branch: CinemaBranch) => {
@@ -303,12 +387,29 @@ export function App() {
     setTrailerMovie(movie);
   }, []);
 
-  // Handle Seat Hold Request (Supports Multi-Seat Holding & Persistent Multi-Branch State!)
+  // Handle Seat Hold Request (Strict Cross-Device Global Lock Enforcement!)
   const handleHoldSeat = useCallback(async (seatCode: string) => {
     if (!showtime || isHolding) return;
 
     setIsHolding(true);
     setToastMessage(null);
+
+    const stId = showtime.id || 'showtime-spiderman-8pm';
+    const targetScopedKey = getScopedSeatKey(selectedBranch.id, stId, seatCode);
+
+    // 1. Double check global cloud state to prevent race conditions!
+    const latestCloud = await fetchCloudState();
+    const existingOtherHold = latestCloud.holds.find(h => h.key === targetScopedKey && h.user_id !== currentUserId);
+    const isCloudBooked = latestCloud.booked.includes(targetScopedKey);
+
+    if (isCloudBooked || existingOtherHold) {
+      setToastMessage({
+        text: `⚠️ Seat ${seatCode} is currently HELD by another user on another device! Please select an available seat.`,
+        type: 'error'
+      });
+      setIsHolding(false);
+      return;
+    }
 
     // If live backend API is available
     if (isLiveBackend) {
@@ -321,7 +422,6 @@ export function App() {
         if (res.data.success) {
           const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
           const storedBooked = getStoredBookedSeatCodes();
-          const stId = showtime.id;
           const merged: Seat[] = seatsRes.data.map((s: Seat) => {
             const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
             return storedBooked.includes(key) ? { ...s, status: 'BOOKED' as const } : s;
@@ -332,6 +432,17 @@ export function App() {
           const myHeld = merged.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
           const heldCodes = myHeld.map(s => s.seat_code);
           const heldCodesStr = heldCodes.join(', ');
+
+          // Broadcast Hold to Global Cloud Store so Laptop updates immediately!
+          const newCloudHold: CloudHold = {
+            key: targetScopedKey,
+            seat_code: seatCode,
+            branch_id: selectedBranch.id,
+            showtime_id: stId,
+            user_id: currentUserId,
+            expires_at: res.data.hold_expires_at
+          };
+          await addCloudHold([newCloudHold]);
 
           // Update Multi-Branch Hold Engine Store
           setBranchHoldsStore(prev => ({
@@ -348,7 +459,7 @@ export function App() {
           setHoldExpiresAt(res.data.hold_expires_at);
 
           setToastMessage({
-            text: `Seat ${seatCode} held at ${selectedBranch.name}! (${heldCodes.length} seat${heldCodes.length > 1 ? 's' : ''} total: ${heldCodesStr}).`,
+            text: `🔒 Seat ${seatCode} locked globally across all devices for ${selectedBranch.name}!`,
             type: 'success'
           });
         }
@@ -361,44 +472,60 @@ export function App() {
       return;
     }
 
-    // Client-side Preview Fallback Mode for Multi-Seat Holding
-    setTimeout(() => {
-      const mockRef = heldBookingRef || `REF-${Math.floor(100000 + Math.random() * 900000)}`;
-      const expires = new Date(Date.now() + 60000).toISOString();
+    // Client-side Preview Fallback Mode for Multi-Device Global Seat Holding
+    const mockRef = heldBookingRef || `REF-${Math.floor(100000 + Math.random() * 900000)}`;
+    const expires = new Date(Date.now() + 60000).toISOString();
 
-      setSeats(prev => {
-        const updated: Seat[] = prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD' as const, held_by_user_id: currentUserId, hold_expires_at: expires } : s);
-        const myHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
-        const heldCodes = myHeld.map(s => s.seat_code);
-        const heldCodesStr = heldCodes.join(', ');
+    const newCloudHold: CloudHold = {
+      key: targetScopedKey,
+      seat_code: seatCode,
+      branch_id: selectedBranch.id,
+      showtime_id: stId,
+      user_id: currentUserId,
+      expires_at: expires
+    };
 
-        setBranchHoldsStore(bPrev => ({
-          ...bPrev,
-          [selectedBranch.id]: {
-            seatCodes: heldCodes,
-            bookingRef: mockRef,
-            expiresAt: expires
-          }
-        }));
+    // Push hold to Global Cloud Store immediately!
+    await addCloudHold([newCloudHold]);
 
-        setSelectedSeatCode(heldCodesStr);
-        setHeldBookingRef(mockRef);
-        setHoldExpiresAt(expires);
+    setSeats(prev => {
+      const updated: Seat[] = prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD' as const, held_by_user_id: currentUserId, hold_expires_at: expires } : s);
+      const myHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
+      const heldCodes = myHeld.map(s => s.seat_code);
+      const heldCodesStr = heldCodes.join(', ');
 
-        setToastMessage({
-          text: `Seat ${seatCode} held at ${selectedBranch.name}! (${heldCodes.length} seat${heldCodes.length > 1 ? 's' : ''} total: ${heldCodesStr}).`,
-          type: 'success'
-        });
+      setBranchHoldsStore(bPrev => ({
+        ...bPrev,
+        [selectedBranch.id]: {
+          seatCodes: heldCodes,
+          bookingRef: mockRef,
+          expiresAt: expires
+        }
+      }));
 
-        return updated;
+      setSelectedSeatCode(heldCodesStr);
+      setHeldBookingRef(mockRef);
+      setHoldExpiresAt(expires);
+
+      setToastMessage({
+        text: `🔒 Seat ${seatCode} locked globally across all devices for ${selectedBranch.name}!`,
+        type: 'success'
       });
 
-      setIsHolding(false);
-    }, 400);
+      return updated;
+    });
+
+    setIsHolding(false);
   }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef, selectedBranch.id, selectedBranch.name]);
 
   // Handle Single Seat Release Request
-  const handleReleaseSingleSeat = useCallback((seatCode: string) => {
+  const handleReleaseSingleSeat = useCallback(async (seatCode: string) => {
+    const stId = showtime?.id || 'showtime-spiderman-8pm';
+    const targetScopedKey = getScopedSeatKey(selectedBranch.id, stId, seatCode);
+
+    // Release from Global Cloud Store
+    await removeCloudHold(currentUserId, [targetScopedKey]);
+
     setSeats(prev => {
       const updated: Seat[] = prev.map(s => (s.seat_code === seatCode && s.held_by_user_id === currentUserId) ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s);
       const remainingMyHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
@@ -431,9 +558,9 @@ export function App() {
       }
       return updated;
     });
-  }, [currentUserId, selectedBranch.id, selectedBranch.name]);
+  }, [currentUserId, selectedBranch.id, selectedBranch.name, showtime?.id]);
 
-  // Handle Manual Cancel Hold Request (Releases ALL held seats for current branch)
+  // Handle Manual Cancel Hold Request (Releases ALL held seats globally for current branch)
   const handleCancelHold = useCallback(async () => {
     if (!showtime) return;
 
@@ -445,6 +572,9 @@ export function App() {
       }
     }
 
+    // Release all holds for current user from Global Cloud Store
+    await removeCloudHold(currentUserId);
+
     setBranchHoldsStore(prev => {
       const copy = { ...prev };
       delete copy[selectedBranch.id];
@@ -452,7 +582,7 @@ export function App() {
     });
 
     setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s));
-    setToastMessage({ text: `All seat holds cancelled for ${selectedBranch.name}! Seats returned to Available.`, type: 'success' });
+    setToastMessage({ text: `All seat holds cancelled for ${selectedBranch.name}! Seats released globally.`, type: 'success' });
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
@@ -461,6 +591,8 @@ export function App() {
 
   // Handle Automatic Hold Expiration
   const handleHoldExpired = useCallback(async () => {
+    await removeCloudHold(currentUserId);
+
     setBranchHoldsStore(prev => {
       const copy = { ...prev };
       delete copy[selectedBranch.id];
@@ -634,7 +766,7 @@ export function App() {
           amount={totalCheckoutAmount}
           selectedSnacks={selectedSnacks}
           onClose={() => setShowPaymentModal(false)}
-          onSuccess={(ref) => {
+          onSuccess={async (ref) => {
             const heldByMe = seats.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
             const heldCodes = heldByMe.map(s => s.seat_code);
             const targetCodes = heldCodes.length > 0 
@@ -644,11 +776,10 @@ export function App() {
             const confirmedSeatStr = selectedSeatCode || targetCodes.join(', ');
             const stId = showtime?.id || 'showtime-spiderman-8pm';
 
-            targetCodes.forEach(code => {
-              const scopedKey = getScopedSeatKey(selectedBranch.id, stId, code);
-              saveBookedSeatCode(scopedKey);
-              syncBookedSeatToCloud(scopedKey);
-            });
+            const targetScopedKeys = targetCodes.map(code => getScopedSeatKey(selectedBranch.id, stId, code));
+
+            // Confirm Cloud Bookings globally across all devices!
+            await confirmCloudBookings(targetScopedKeys, currentUserId);
 
             // Clear branch hold store for this branch
             setBranchHoldsStore(prev => {
