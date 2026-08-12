@@ -80,6 +80,36 @@ const getStoredMyTickets = (): Booking[] => {
   }
 };
 
+// Helper to extract all booked seat keys from Digital Wallet tickets
+const getBookedSeatKeysFromMyTickets = (): string[] => {
+  const tickets = getStoredMyTickets();
+  const keys: string[] = [];
+
+  tickets.forEach(ticket => {
+    const stId = ticket.showtime_id || 'showtime-spiderman-8pm';
+    let branchId = 'theatre-cuet';
+    if (ticket.screen_name) {
+      const lowerScreen = ticket.screen_name.toLowerCase();
+      if (lowerScreen.includes('gec')) branchId = 'theatre-gec';
+      else if (lowerScreen.includes('bashundhara') || lowerScreen.includes('star')) branchId = 'theatre-star';
+      else if (lowerScreen.includes('jamuna') || lowerScreen.includes('blockbuster')) branchId = 'theatre-blockbuster';
+      else if (lowerScreen.includes('sylhet') || lowerScreen.includes('grand sylhet')) branchId = 'theatre-sylhet';
+    }
+
+    if (ticket.seat_code) {
+      const seatCodes = ticket.seat_code.split(',').map(s => s.trim());
+      seatCodes.forEach(code => {
+        if (code) {
+          keys.push(getScopedSeatKey(branchId, stId, code));
+          keys.push(code); // Fallback raw seat code for local branch matching
+        }
+      });
+    }
+  });
+
+  return keys;
+};
+
 // Helper to save new ticket to Digital Wallet
 const saveMyTicket = (newTicket: Booking) => {
   try {
@@ -157,7 +187,8 @@ const confirmCloudBookings = async (confirmedKeys: string[], user_id: string) =>
   try {
     const cloud = await fetchCloudState();
     const localBooked = getStoredBookedSeatCodes();
-    const combinedBooked = Array.from(new Set([...cloud.booked, ...localBooked, ...confirmedKeys]));
+    const walletKeys = getBookedSeatKeysFromMyTickets();
+    const combinedBooked = Array.from(new Set([...cloud.booked, ...localBooked, ...walletKeys, ...confirmedKeys]));
     const updatedHolds = cloud.holds.filter(h => !confirmedKeys.includes(h.key) && h.user_id !== user_id);
 
     localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(combinedBooked));
@@ -179,16 +210,19 @@ export function App() {
   // Persistent Branch Hold Engine State (Keyed by Branch ID)
   const [branchHoldsStore, setBranchHoldsStore] = useState<Record<string, BranchHoldState>>({});
 
-  // Initialize seats state merged with location-scoped booked keys!
+  // Initialize seats state merged with location-scoped booked keys and wallet tickets!
   const [seats, setSeats] = useState<Seat[]>(() => {
     const initialSeats = MovieFallback.getInitialSeats();
     const storedBooked = getStoredBookedSeatCodes();
+    const walletKeys = getBookedSeatKeysFromMyTickets();
+    const combinedBooked = Array.from(new Set([...storedBooked, ...walletKeys]));
     const curBranch = getStoredBranch();
     const stId = 'showtime-spiderman-8pm';
 
     return initialSeats.map(s => {
       const key = getScopedSeatKey(curBranch.id, stId, s.seat_code);
-      return storedBooked.includes(key)
+      const isBooked = combinedBooked.includes(key) || (curBranch.id === 'theatre-cuet' && combinedBooked.includes(s.seat_code));
+      return isBooked
         ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null }
         : s;
     });
@@ -243,13 +277,16 @@ export function App() {
         if (!isMounted) return;
         if (seatsRes.data && Array.isArray(seatsRes.data)) {
           const storedBooked = getStoredBookedSeatCodes();
+          const walletKeys = getBookedSeatKeysFromMyTickets();
+          const combinedBooked = Array.from(new Set([...storedBooked, ...walletKeys]));
           const stId = showtime?.id || 'showtime-spiderman-8pm';
           const activeBranchHold = branchHoldsStore[selectedBranch.id];
           const activeHeldCodes = activeBranchHold ? activeBranchHold.seatCodes : [];
 
           const merged: Seat[] = seatsRes.data.map((s: Seat) => {
             const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
-            if (storedBooked.includes(key)) {
+            const isBooked = combinedBooked.includes(key) || (selectedBranch.id === 'theatre-cuet' && combinedBooked.includes(s.seat_code));
+            if (isBooked) {
               return { ...s, status: 'BOOKED' as const };
             }
             if (activeHeldCodes.includes(s.seat_code)) {
@@ -267,13 +304,14 @@ export function App() {
     return () => { isMounted = false; };
   }, [selectedBranch.id, showtime?.id, branchHoldsStore, currentUserId]);
 
-  // MULTI-DEVICE CLOUD REAL-TIME CONCURRENCY POLLER: Synchronizes holds & bookings across Phone <-> Laptop!
+  // MULTI-DEVICE CLOUD REAL-TIME CONCURRENCY POLLER: Synchronizes holds & wallet bookings across Phone <-> Laptop!
   useEffect(() => {
     let isMounted = true;
     const syncSeatsAcrossDevices = async () => {
       const cloud = await fetchCloudState();
       const localSeats = getStoredBookedSeatCodes();
-      const combinedBooked = Array.from(new Set([...cloud.booked, ...localSeats]));
+      const walletKeys = getBookedSeatKeysFromMyTickets();
+      const combinedBooked = Array.from(new Set([...cloud.booked, ...localSeats, ...walletKeys]));
 
       if (!isMounted) return;
 
@@ -283,9 +321,10 @@ export function App() {
         let changed = false;
         const updated: Seat[] = prevSeats.map(s => {
           const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
+          const isBooked = combinedBooked.includes(key) || (selectedBranch.id === 'theatre-cuet' && combinedBooked.includes(s.seat_code));
 
-          // 1. Check if booked globally
-          if (combinedBooked.includes(key)) {
+          // 1. Check if booked globally or in wallet
+          if (isBooked) {
             if (s.status !== 'BOOKED') {
               changed = true;
               return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
@@ -340,6 +379,8 @@ export function App() {
     } catch (e) {}
 
     const storedBooked = getStoredBookedSeatCodes();
+    const walletKeys = getBookedSeatKeysFromMyTickets();
+    const combinedBooked = Array.from(new Set([...storedBooked, ...walletKeys]));
     const initialSeats = MovieFallback.getInitialSeats();
     const stId = showtime?.id || 'showtime-spiderman-8pm';
 
@@ -359,7 +400,7 @@ export function App() {
 
     setSeats(prev => initialSeats.map(s => {
       const scopedKey = getScopedSeatKey(branch.id, stId, s.seat_code);
-      const isBooked = storedBooked.includes(scopedKey);
+      const isBooked = combinedBooked.includes(scopedKey) || (branch.id === 'theatre-cuet' && combinedBooked.includes(s.seat_code));
       const isHeldInThisBranch = branchHeldCodes.includes(s.seat_code);
 
       if (isBooked) return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
@@ -399,12 +440,13 @@ export function App() {
 
     // 1. Double check global cloud state to prevent race conditions!
     const latestCloud = await fetchCloudState();
+    const walletKeys = getBookedSeatKeysFromMyTickets();
     const existingOtherHold = latestCloud.holds.find(h => h.key === targetScopedKey && h.user_id !== currentUserId);
-    const isCloudBooked = latestCloud.booked.includes(targetScopedKey);
+    const isCloudBooked = latestCloud.booked.includes(targetScopedKey) || walletKeys.includes(targetScopedKey) || walletKeys.includes(seatCode);
 
     if (isCloudBooked || existingOtherHold) {
       setToastMessage({
-        text: `⚠️ Seat ${seatCode} is currently HELD by another user on another device! Please select an available seat.`,
+        text: `⚠️ Seat ${seatCode} is already BOOKED or HELD by another user on another device! Please select an available seat.`,
         type: 'error'
       });
       setIsHolding(false);
@@ -424,7 +466,7 @@ export function App() {
           const storedBooked = getStoredBookedSeatCodes();
           const merged: Seat[] = seatsRes.data.map((s: Seat) => {
             const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
-            return storedBooked.includes(key) ? { ...s, status: 'BOOKED' as const } : s;
+            return (storedBooked.includes(key) || walletKeys.includes(s.seat_code)) ? { ...s, status: 'BOOKED' as const } : s;
           });
           
           setSeats(merged);
