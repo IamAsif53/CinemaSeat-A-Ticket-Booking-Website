@@ -234,7 +234,7 @@ export function App() {
     setTrailerMovie(movie);
   }, []);
 
-  // Handle Seat Hold Request
+  // Handle Seat Hold Request (Supports Multi-Seat Holding!)
   const handleHoldSeat = useCallback(async (seatCode: string) => {
     if (!showtime || isHolding) return;
 
@@ -250,84 +250,83 @@ export function App() {
         });
 
         if (res.data.success) {
-          setSelectedSeatCode(seatCode);
-          setHeldBookingRef(res.data.booking_ref);
-          setHoldExpiresAt(res.data.hold_expires_at);
-          setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
-
           const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
           const storedBooked = getStoredBookedSeatCodes();
           const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
+          
           setSeats(merged);
+
+          const myHeld = merged.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
+          const heldCodes = myHeld.map(s => s.seat_code).join(', ');
+          
+          setSelectedSeatCode(heldCodes);
+          setHeldBookingRef(res.data.booking_ref);
+          setHoldExpiresAt(res.data.hold_expires_at);
+
+          setToastMessage({
+            text: `Seat ${seatCode} held! (${myHeld.length} seat${myHeld.length > 1 ? 's' : ''} total: ${heldCodes}). You have 60s to pay.`,
+            type: 'success'
+          });
         }
       } catch (err: any) {
         const errMsg = err?.response?.data?.message || err?.response?.data?.error || `Failed to hold seat ${seatCode}`;
         setToastMessage({ text: errMsg, type: 'error' });
-        
-        if (showtime) {
-          const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-          const storedBooked = getStoredBookedSeatCodes();
-          const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
-          setSeats(merged);
-        }
       } finally {
         setIsHolding(false);
       }
       return;
     }
 
-    // Client-side Preview Fallback Mode
+    // Client-side Preview Fallback Mode for Multi-Seat Holding
     setTimeout(() => {
-      const mockRef = `REF-${Math.floor(100000 + Math.random() * 900000)}`;
+      const mockRef = heldBookingRef || `REF-${Math.floor(100000 + Math.random() * 900000)}`;
       const expires = new Date(Date.now() + 60000).toISOString();
-      setSelectedSeatCode(seatCode);
-      setHeldBookingRef(mockRef);
-      setHoldExpiresAt(expires);
 
-      setSeats(prev => prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD', held_by_user_id: currentUserId, hold_expires_at: expires } : s));
-      setToastMessage({ text: `Seat ${seatCode} held successfully! You have 60 seconds to pay.`, type: 'success' });
+      setSeats(prev => {
+        const updated = prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD', held_by_user_id: currentUserId, hold_expires_at: expires } : s);
+        const myHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
+        const heldCodes = myHeld.map(s => s.seat_code).join(', ');
+        
+        setSelectedSeatCode(heldCodes);
+        setHeldBookingRef(mockRef);
+        setHoldExpiresAt(expires);
+
+        setToastMessage({
+          text: `Seat ${seatCode} held successfully! (${myHeld.length} seat${myHeld.length > 1 ? 's' : ''} total: ${heldCodes}). You have 60 seconds to pay.`,
+          type: 'success'
+        });
+
+        return updated;
+      });
+
       setIsHolding(false);
     }, 400);
-  }, [showtime, isHolding, currentUserId, isLiveBackend]);
+  }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef]);
 
-  // Handle Manual Cancel Hold Request
+  // Handle Manual Cancel Hold Request (Releases ALL held seats for current user)
   const handleCancelHold = useCallback(async () => {
-    if (!heldBookingRef || !showtime) return;
+    if (!showtime) return;
 
-    if (isLiveBackend) {
+    if (isLiveBackend && heldBookingRef) {
       try {
         await axios.post('/api/bookings/cancel', { booking_ref: heldBookingRef });
-        setToastMessage({ text: `Seat ${selectedSeatCode} hold cancelled. Returned to Available.`, type: 'success' });
-
-        setSelectedSeatCode(null);
-        setHeldBookingRef(null);
-        setHoldExpiresAt(null);
-        setSelectedSnacks([]);
-
-        const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-        const storedBooked = getStoredBookedSeatCodes();
-        const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
-        setSeats(merged);
       } catch (err: any) {
-        setToastMessage({ text: 'Failed to cancel seat hold', type: 'error' });
+        console.log('Cancel hold endpoint called');
       }
-      return;
     }
 
-    // Client Preview Fallback
-    setSeats(prev => prev.map(s => s.seat_code === selectedSeatCode ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
-    setToastMessage({ text: `Seat ${selectedSeatCode} hold cancelled. Returned to Available.`, type: 'success' });
+    // Release all seats held by currentUserId
+    setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
+    setToastMessage({ text: `Seat holds cancelled. All seats returned to Available.`, type: 'success' });
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
     setSelectedSnacks([]);
-  }, [heldBookingRef, showtime, selectedSeatCode, isLiveBackend]);
+  }, [heldBookingRef, showtime, currentUserId, isLiveBackend]);
 
   // Handle Automatic Hold Expiration
   const handleHoldExpired = useCallback(async () => {
-    if (!selectedSeatCode) return;
-    const seatCode = selectedSeatCode;
-
+    setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
@@ -336,19 +335,10 @@ export function App() {
     setSelectedSnacks([]);
 
     setToastMessage({
-      text: `⏰ Hold for seat ${seatCode} has expired! Seat released back to Available.`,
+      text: `⏰ Seat hold time has expired! Seats released back to Available.`,
       type: 'error'
     });
-
-    if (isLiveBackend && showtime) {
-      const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
-      const storedBooked = getStoredBookedSeatCodes();
-      const merged = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' } : s);
-      setSeats(merged);
-    } else {
-      setSeats(prev => prev.map(s => s.seat_code === seatCode ? { ...s, status: 'AVAILABLE', held_by_user_id: null, hold_expires_at: null } : s));
-    }
-  }, [selectedSeatCode, showtime, isLiveBackend]);
+  }, [currentUserId]);
 
   const featuredMovie = movies.find(m => m.id === 'movie-spiderman') || movies[0];
 
@@ -435,12 +425,14 @@ export function App() {
               onHoldSeat={handleHoldSeat}
               onCancelHold={handleCancelHold}
               onHoldExpired={handleHoldExpired}
-              onPaySeat={() => {
-                setTotalCheckoutAmount(showtime.price_amount || 450);
+              onPaySeat={(totalPrice, displayLabel) => {
+                setTotalCheckoutAmount(totalPrice);
+                setSelectedSeatCode(displayLabel);
                 setShowSnackModal(true);
               }}
               isHolding={isHolding}
               showtimeId={showtime.id}
+              unitTicketPrice={showtime.price_amount || 450}
             />
           </div>
         )}
@@ -480,7 +472,7 @@ export function App() {
       {showSnackModal && selectedSeatCode && (
         <SnackModal
           seatCode={selectedSeatCode}
-          ticketPrice={showtime?.price_amount || 450}
+          ticketPrice={totalCheckoutAmount}
           onClose={() => setShowSnackModal(false)}
           onConfirmSnacks={(chosenSnacks, finalAmount) => {
             setSelectedSnacks(chosenSnacks);
@@ -500,35 +492,41 @@ export function App() {
           selectedSnacks={selectedSnacks}
           onClose={() => setShowPaymentModal(false)}
           onSuccess={(ref) => {
-            const currentSeat = selectedSeatCode;
-            if (currentSeat) {
-              saveBookedSeatCode(currentSeat);
-              syncBookedSeatToCloud(currentSeat);
-              setSeats(prev => prev.map(s => s.seat_code === currentSeat ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
+            const heldByMe = seats.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
+            const heldCodes = heldByMe.map(s => s.seat_code);
+            const targetCodes = heldCodes.length > 0 
+              ? heldCodes 
+              : (selectedSeatCode ? selectedSeatCode.split(', ').map(c => c.trim()) : []);
 
-              // Save confirmed ticket to Digital Wallet
-              const ticketObj: Booking = {
-                booking_ref: ref,
-                showtime_id: showtime?.id || 'showtime-spiderman-8pm',
-                seat_code: currentSeat,
-                amount: totalCheckoutAmount,
-                status: 'CONFIRMED',
-                movie_title: selectedMovie?.title || 'Spider-Man: Brand New Day',
-                screen_name: `${selectedBranch.name} — Hall 1 (IMAX)`,
-                created_at: new Date().toISOString(),
-                snacks: selectedSnacks
-              };
-              saveMyTicket(ticketObj);
-              setMyTickets(getStoredMyTickets());
-            }
+            targetCodes.forEach(code => {
+              saveBookedSeatCode(code);
+              syncBookedSeatToCloud(code);
+            });
+
+            setSeats(prev => prev.map(s => (targetCodes.includes(s.seat_code) || (s.status === 'HELD' && s.held_by_user_id === currentUserId)) ? { ...s, status: 'BOOKED', held_by_user_id: null, hold_expires_at: null } : s));
+
+            // Save confirmed multi-ticket object to Digital Wallet
+            const ticketObj: Booking = {
+              booking_ref: ref,
+              showtime_id: showtime?.id || 'showtime-spiderman-8pm',
+              seat_code: selectedSeatCode || targetCodes.join(', '),
+              amount: totalCheckoutAmount,
+              status: 'CONFIRMED',
+              movie_title: selectedMovie?.title || 'Spider-Man: Brand New Day',
+              screen_name: `${selectedBranch.name} — Hall 1 (IMAX)`,
+              created_at: new Date().toISOString(),
+              snacks: selectedSnacks
+            };
+            saveMyTicket(ticketObj);
+            setMyTickets(getStoredMyTickets());
+
             setShowPaymentModal(false);
             setConfirmedBookingRef(ref);
             setHeldBookingRef(null);
             setSelectedSeatCode(null);
             setHoldExpiresAt(null);
-            if (currentSeat) {
-              setToastMessage({ text: `🎉 Seat ${currentSeat} confirmed & locked across all devices!`, type: 'success' });
-            }
+
+            setToastMessage({ text: `🎉 Seats ${selectedSeatCode || targetCodes.join(', ')} confirmed & locked across all devices!`, type: 'success' });
           }}
         />
       )}

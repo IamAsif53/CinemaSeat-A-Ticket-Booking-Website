@@ -88,10 +88,10 @@ export const SnackModal: React.FC<SnackModalProps> = ({
               <h3 className="font-extrabold text-white text-base sm:text-lg tracking-tight font-sans flex items-center gap-2">
                 <span>Cinema Concessions Bar</span>
                 <span className="px-2 py-0.5 text-[10px] bg-brand-500/20 text-brand-400 font-bold rounded">
-                  Seat {seatCode}
+                  Seats: {seatCode}
                 </span>
               </h3>
-              <p className="text-xs text-gray-400">Add fresh popcorn & cold drinks to your movie ticket</p>
+              <p className="text-xs text-gray-400">Add fresh popcorn & cold drinks to your movie ticket(s)</p>
             </div>
           </div>
 
@@ -153,7 +153,7 @@ export const SnackModal: React.FC<SnackModalProps> = ({
         {/* Footer Breakdown & Action Buttons */}
         <div className="bg-dark-900/90 p-5 border-t border-gray-800 space-y-4 shrink-0">
           <div className="flex items-center justify-between text-xs text-gray-300 font-semibold border-b border-gray-800 pb-3">
-            <span>Ticket (Seat {seatCode}): <strong className="text-white">BDT {ticketPrice}</strong></span>
+            <span>Tickets ({seatCode}): <strong className="text-white">BDT {ticketPrice}</strong></span>
             <span>Snacks ({selectedCount} items): <strong className="text-amber-400">BDT {snacksTotal}</strong></span>
             <span className="text-sm font-black text-brand-400">Total: BDT {grandTotal}</span>
           </div>
