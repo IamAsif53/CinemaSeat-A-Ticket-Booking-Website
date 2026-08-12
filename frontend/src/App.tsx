@@ -22,7 +22,12 @@ const MY_TICKETS_STORAGE_KEY = 'cinemaseat_my_tickets';
 const BRANCH_STORAGE_KEY = 'cinemaseat_selected_branch';
 const CLOUD_SYNC_URL = 'https://jsonblob.com/api/jsonBlob/019fe0b1-ef87-76ed-a02e-d1ead4e15086';
 
-// Helper to load booked seat codes from localStorage
+// Helper to construct location & showtime scoped seat key
+const getScopedSeatKey = (branchId: string, showtimeId: string, seatCode: string) => {
+  return `${branchId || 'theatre-cuet'}:${showtimeId || 'showtime-spiderman-8pm'}:${seatCode}`;
+};
+
+// Helper to load booked seat keys from localStorage
 const getStoredBookedSeatCodes = (): string[] => {
   try {
     const saved = localStorage.getItem(BOOKED_SEATS_STORAGE_KEY);
@@ -32,12 +37,12 @@ const getStoredBookedSeatCodes = (): string[] => {
   }
 };
 
-// Helper to save booked seat code to localStorage
-const saveBookedSeatCode = (code: string) => {
+// Helper to save booked seat key to localStorage
+const saveBookedSeatCode = (codeKey: string) => {
   try {
     const current = getStoredBookedSeatCodes();
-    if (!current.includes(code)) {
-      const updated = [...current, code];
+    if (!current.includes(codeKey)) {
+      const updated = [...current, codeKey];
       localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(updated));
     }
   } catch (e) {
@@ -88,14 +93,14 @@ const fetchCloudBookedSeats = async (): Promise<string[]> => {
   return [];
 };
 
-// Helper to sync booked seat to global cloud store
-const syncBookedSeatToCloud = async (seatCode: string) => {
+// Helper to sync booked seat key to global cloud store
+const syncBookedSeatToCloud = async (codeKey: string) => {
   try {
     const currentLocal = getStoredBookedSeatCodes();
     const cloudList = await fetchCloudBookedSeats();
     
     // Combine local and cloud seats uniquely
-    const combined = Array.from(new Set([...currentLocal, ...cloudList, seatCode]));
+    const combined = Array.from(new Set([...currentLocal, ...cloudList, codeKey]));
     
     // Update local storage
     localStorage.setItem(BOOKED_SEATS_STORAGE_KEY, JSON.stringify(combined));
@@ -111,12 +116,21 @@ export function App() {
   const [movies, setMovies] = useState<Movie[]>(() => MovieFallback.getMovies());
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => MovieFallback.getMovies()[0]);
   const [showtime, setShowtime] = useState<Showtime | null>(() => MovieFallback.getInitialShowtime());
+  const [selectedBranch, setSelectedBranch] = useState<CinemaBranch>(() => getStoredBranch());
   
-  // Initialize seats state merged with localStorage persistent booked codes!
+  // Initialize seats state merged with location-scoped booked keys!
   const [seats, setSeats] = useState<Seat[]>(() => {
     const initialSeats = MovieFallback.getInitialSeats();
     const storedBooked = getStoredBookedSeatCodes();
-    return initialSeats.map(s => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null } : s);
+    const curBranch = getStoredBranch();
+    const stId = 'showtime-spiderman-8pm';
+
+    return initialSeats.map(s => {
+      const key = getScopedSeatKey(curBranch.id, stId, s.seat_code);
+      return storedBooked.includes(key)
+        ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null }
+        : s;
+    });
   });
   
   const seatsRef = useRef<Seat[]>(seats);
@@ -141,8 +155,6 @@ export function App() {
   const [showTicketDrawer, setShowTicketDrawer] = useState<boolean>(false);
   const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
   const [showTelemetryModal, setShowTelemetryModal] = useState<boolean>(false);
-
-  const [selectedBranch, setSelectedBranch] = useState<CinemaBranch>(() => getStoredBranch());
   const [showBranchModal, setShowBranchModal] = useState<boolean>(false);
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
@@ -170,7 +182,12 @@ export function App() {
         if (!isMounted) return;
         if (seatsRes.data && Array.isArray(seatsRes.data)) {
           const storedBooked = getStoredBookedSeatCodes();
-          const merged: Seat[] = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' as const } : s);
+          const stId = showtime?.id || 'showtime-spiderman-8pm';
+
+          const merged: Seat[] = seatsRes.data.map((s: Seat) => {
+            const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
+            return storedBooked.includes(key) ? { ...s, status: 'BOOKED' as const } : s;
+          });
           setSeats(merged);
         }
       } catch (err) {
@@ -179,7 +196,7 @@ export function App() {
     };
     init();
     return () => { isMounted = false; };
-  }, []);
+  }, [selectedBranch.id, showtime?.id]);
 
   // MULTI-DEVICE CLOUD POLLER: Synchronize booked seats across Phone <-> Laptop in real-time!
   useEffect(() => {
@@ -193,8 +210,10 @@ export function App() {
 
       setSeats(prevSeats => {
         let changed = false;
+        const stId = showtime?.id || 'showtime-spiderman-8pm';
         const updated: Seat[] = prevSeats.map(s => {
-          if (combinedBooked.includes(s.seat_code) && s.status !== 'BOOKED') {
+          const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
+          if (combinedBooked.includes(key) && s.status !== 'BOOKED') {
             changed = true;
             return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
           }
@@ -210,15 +229,31 @@ export function App() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedBranch.id, showtime?.id]);
 
+  // Switch Cinema Branch / Location — Isolates Seat Maps Per Cinema Branch!
   const handleSelectBranch = useCallback((branch: CinemaBranch) => {
     setSelectedBranch(branch);
     try {
       localStorage.setItem(BRANCH_STORAGE_KEY, JSON.stringify(branch));
     } catch (e) {}
-    setToastMessage({ text: `📍 Cinema location updated to ${branch.name} (${branch.city})`, type: 'success' });
-  }, []);
+
+    // Re-map seats state specifically for the selected cinema branch!
+    const storedBooked = getStoredBookedSeatCodes();
+    const initialSeats = MovieFallback.getInitialSeats();
+    const stId = showtime?.id || 'showtime-spiderman-8pm';
+
+    setSeats(prev => initialSeats.map(s => {
+      const scopedKey = getScopedSeatKey(branch.id, stId, s.seat_code);
+      const isBooked = storedBooked.includes(scopedKey);
+      const isHeldByMe = prev.find(p => p.seat_code === s.seat_code && p.status === 'HELD' && p.held_by_user_id === currentUserId);
+      if (isBooked) return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
+      if (isHeldByMe) return { ...isHeldByMe };
+      return { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null };
+    }));
+
+    setToastMessage({ text: `📍 Cinema location switched to ${branch.name} (${branch.city}). Seat map updated!`, type: 'success' });
+  }, [showtime, currentUserId]);
 
   // Handle Booking Action on any movie card
   const handleBookMovieSeats = useCallback((movie: Movie) => {
@@ -253,7 +288,11 @@ export function App() {
         if (res.data.success) {
           const seatsRes = await axios.get(`/api/showtimes/${showtime.id}/seats`);
           const storedBooked = getStoredBookedSeatCodes();
-          const merged: Seat[] = seatsRes.data.map((s: Seat) => storedBooked.includes(s.seat_code) ? { ...s, status: 'BOOKED' as const } : s);
+          const stId = showtime.id;
+          const merged: Seat[] = seatsRes.data.map((s: Seat) => {
+            const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
+            return storedBooked.includes(key) ? { ...s, status: 'BOOKED' as const } : s;
+          });
           
           setSeats(merged);
 
@@ -302,7 +341,7 @@ export function App() {
 
       setIsHolding(false);
     }, 400);
-  }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef]);
+  }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef, selectedBranch.id]);
 
   // Handle Single Seat Release Request
   const handleReleaseSingleSeat = useCallback((seatCode: string) => {
@@ -473,6 +512,7 @@ export function App() {
         isOpen={showTicketDrawer}
         onClose={() => setShowTicketDrawer(false)}
         tickets={myTickets}
+        movies={movies}
       />
 
       {/* Live System Telemetry Analytics Widget */}
@@ -521,22 +561,25 @@ export function App() {
               : (selectedSeatCode ? selectedSeatCode.split(', ').map(c => c.trim()) : []);
 
             const confirmedSeatStr = selectedSeatCode || targetCodes.join(', ');
+            const stId = showtime?.id || 'showtime-spiderman-8pm';
 
             targetCodes.forEach(code => {
-              saveBookedSeatCode(code);
-              syncBookedSeatToCloud(code);
+              const scopedKey = getScopedSeatKey(selectedBranch.id, stId, code);
+              saveBookedSeatCode(scopedKey);
+              syncBookedSeatToCloud(scopedKey);
             });
 
             setSeats(prev => prev.map(s => (targetCodes.includes(s.seat_code) || (s.status === 'HELD' && s.held_by_user_id === currentUserId)) ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null } : s));
 
-            // Save confirmed multi-ticket object to Digital Wallet
+            // Save confirmed multi-ticket object with exact movie poster URL to Digital Wallet
             const ticketObj: Booking = {
               booking_ref: ref,
-              showtime_id: showtime?.id || 'showtime-spiderman-8pm',
+              showtime_id: stId,
               seat_code: confirmedSeatStr,
               amount: totalCheckoutAmount,
               status: 'CONFIRMED',
               movie_title: selectedMovie?.title || 'Spider-Man: Brand New Day',
+              poster_url: selectedMovie?.poster_url || 'https://images.unsplash.com/photo-1635805737707-575885ab0820?w=300&q=80',
               screen_name: `${selectedBranch.name} — Hall 1 (IMAX)`,
               created_at: new Date().toISOString(),
               snacks: selectedSnacks
@@ -551,7 +594,7 @@ export function App() {
             setSelectedSeatCode(null);
             setHoldExpiresAt(null);
 
-            setToastMessage({ text: `🎉 Seats ${confirmedSeatStr} confirmed & locked across all devices!`, type: 'success' });
+            setToastMessage({ text: `🎉 Seats ${confirmedSeatStr} confirmed & locked for ${selectedBranch.name}!`, type: 'success' });
           }}
         />
       )}

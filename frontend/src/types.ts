@@ -64,6 +64,7 @@ export interface Booking {
   seat_code?: string;
   screen_name?: string;
   movie_title?: string;
+  poster_url?: string;
   created_at?: string;
   snacks?: SnackItem[];
 }

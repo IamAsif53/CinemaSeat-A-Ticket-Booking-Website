@@ -1,11 +1,12 @@
 import React from 'react';
 import { Ticket, X, CheckCircle2, Download, Smartphone, ShoppingBag, Trash2, Calendar, MapPin } from 'lucide-react';
-import { Booking } from '../types';
+import { Booking, Movie } from '../types';
 
 interface MyTicketsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   tickets: Booking[];
+  movies?: Movie[];
   onCancelTicket?: (bookingRef: string) => void;
 }
 
@@ -13,6 +14,7 @@ export const MyTicketsDrawer: React.FC<MyTicketsDrawerProps> = ({
   isOpen,
   onClose,
   tickets,
+  movies = [],
   onCancelTicket
 }) => {
   if (!isOpen) return null;
@@ -55,6 +57,9 @@ export const MyTicketsDrawer: React.FC<MyTicketsDrawerProps> = ({
           <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 no-scrollbar">
             {tickets.length > 0 ? (
               tickets.map((ticket, idx) => {
+                const matchedMovie = movies.find(m => m.title.toLowerCase().trim() === (ticket.movie_title || '').toLowerCase().trim());
+                const posterUrl = ticket.poster_url || matchedMovie?.poster_url || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=300&q=80';
+
                 const qrData = encodeURIComponent(`CINEMASEAT-TICKET|REF:${ticket.booking_ref}|SEAT:${ticket.seat_code || 'C6'}|STATUS:CONFIRMED`);
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrData}&color=0f172a&bgcolor=ffffff`;
 
@@ -72,7 +77,7 @@ export const MyTicketsDrawer: React.FC<MyTicketsDrawerProps> = ({
                         </span>
                       </div>
                       <span className="px-2.5 py-1 text-xs font-black bg-brand-600 text-white rounded-lg">
-                        Seat {ticket.seat_code || 'C6'}
+                        Seats {ticket.seat_code || 'C6'}
                       </span>
                     </div>
 
@@ -80,7 +85,7 @@ export const MyTicketsDrawer: React.FC<MyTicketsDrawerProps> = ({
                     <div className="flex gap-3 items-center">
                       <div className="w-14 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-700 bg-dark-800">
                         <img 
-                          src="https://images.unsplash.com/photo-1635805737707-575885ab0820?w=300&q=80" 
+                          src={posterUrl} 
                           alt={ticket.movie_title || 'Movie Poster'} 
                           className="w-full h-full object-cover"
                         />
