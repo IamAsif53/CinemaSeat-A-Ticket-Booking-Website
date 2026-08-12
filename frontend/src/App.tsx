@@ -126,6 +126,7 @@ export function App() {
   const [viewMode, setViewMode] = useState<'HOME' | 'CATALOG' | 'BOOKING'>('HOME');
   
   const [selectedSeatCode, setSelectedSeatCode] = useState<string | null>(null);
+  const [lastConfirmedSeatCode, setLastConfirmedSeatCode] = useState<string>('');
   const [heldBookingRef, setHeldBookingRef] = useState<string | null>(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
   
@@ -519,6 +520,8 @@ export function App() {
               ? heldCodes 
               : (selectedSeatCode ? selectedSeatCode.split(', ').map(c => c.trim()) : []);
 
+            const confirmedSeatStr = selectedSeatCode || targetCodes.join(', ');
+
             targetCodes.forEach(code => {
               saveBookedSeatCode(code);
               syncBookedSeatToCloud(code);
@@ -530,7 +533,7 @@ export function App() {
             const ticketObj: Booking = {
               booking_ref: ref,
               showtime_id: showtime?.id || 'showtime-spiderman-8pm',
-              seat_code: selectedSeatCode || targetCodes.join(', '),
+              seat_code: confirmedSeatStr,
               amount: totalCheckoutAmount,
               status: 'CONFIRMED',
               movie_title: selectedMovie?.title || 'Spider-Man: Brand New Day',
@@ -541,13 +544,14 @@ export function App() {
             saveMyTicket(ticketObj);
             setMyTickets(getStoredMyTickets());
 
+            setLastConfirmedSeatCode(confirmedSeatStr);
             setShowPaymentModal(false);
             setConfirmedBookingRef(ref);
             setHeldBookingRef(null);
             setSelectedSeatCode(null);
             setHoldExpiresAt(null);
 
-            setToastMessage({ text: `🎉 Seats ${selectedSeatCode || targetCodes.join(', ')} confirmed & locked across all devices!`, type: 'success' });
+            setToastMessage({ text: `🎉 Seats ${confirmedSeatStr} confirmed & locked across all devices!`, type: 'success' });
           }}
         />
       )}
@@ -556,6 +560,7 @@ export function App() {
       {confirmedBookingRef && (
         <TicketReceiptModal
           bookingRef={confirmedBookingRef}
+          seatCode={lastConfirmedSeatCode}
           selectedSnacks={selectedSnacks}
           totalAmountPaid={totalCheckoutAmount}
           onClose={() => {

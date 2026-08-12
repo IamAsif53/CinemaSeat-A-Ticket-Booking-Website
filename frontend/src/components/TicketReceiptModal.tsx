@@ -6,6 +6,7 @@ import { Booking, SnackItem } from '../types';
 
 interface TicketReceiptModalProps {
   bookingRef: string;
+  seatCode?: string;
   selectedSnacks?: SnackItem[];
   totalAmountPaid?: number;
   onClose: () => void;
@@ -13,6 +14,7 @@ interface TicketReceiptModalProps {
 
 export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({
   bookingRef,
+  seatCode,
   selectedSnacks = [],
   totalAmountPaid,
   onClose
@@ -31,7 +33,10 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({
       try {
         const res = await axios.get(`/api/bookings/${bookingRef}`, { timeout: 3000 });
         if (res.data) {
-          setBooking(res.data);
+          setBooking({
+            ...res.data,
+            seat_code: seatCode || res.data.seat_code || 'C6, C7'
+          });
           return;
         }
       } catch (err) {
@@ -42,10 +47,10 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({
       setBooking({
         id: `b_${bookingRef}`,
         showtime_id: 'showtime-spiderman-8pm',
-        seat_code: 'C5',
+        seat_code: seatCode || 'C6, C7',
         user_phone: '01712345678',
         status: 'CONFIRMED',
-        amount: totalAmountPaid || 450,
+        amount: totalAmountPaid || 900,
         booking_ref: bookingRef,
         created_at: new Date().toISOString(),
         movie_title: 'Spider-Man: Brand New Day',
@@ -55,10 +60,11 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({
     };
 
     fetchBooking();
-  }, [bookingRef, totalAmountPaid, selectedSnacks]);
+  }, [bookingRef, seatCode, totalAmountPaid, selectedSnacks]);
 
-  const displayAmount = totalAmountPaid || booking?.amount || 450;
-  const qrData = encodeURIComponent(`CINEMASEAT-TICKET|REF:${bookingRef}|SEAT:${booking?.seat_code || 'C5'}|SNACKS:${selectedSnacks.length}|STATUS:CONFIRMED`);
+  const displayAmount = totalAmountPaid || booking?.amount || 900;
+  const displaySeatCode = seatCode || booking?.seat_code || 'C6, C7';
+  const qrData = encodeURIComponent(`CINEMASEAT-TICKET|REF:${bookingRef}|SEAT:${displaySeatCode}|SNACKS:${selectedSnacks.length}|STATUS:CONFIRMED`);
   const realQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrData}&color=0f172a&bgcolor=ffffff`;
 
   return (
@@ -92,7 +98,7 @@ export const TicketReceiptModal: React.FC<TicketReceiptModalProps> = ({
                   <p className="text-xs text-gray-400">{booking.screen_name || 'Grand Hall IMAX 1'}</p>
                 </div>
                 <span className="px-2.5 py-1 text-xs font-black bg-brand-600 text-white rounded-lg shrink-0">
-                  Seat {booking.seat_code}
+                  Seats {displaySeatCode}
                 </span>
               </div>
 
