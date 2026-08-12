@@ -22,6 +22,12 @@ const MY_TICKETS_STORAGE_KEY = 'cinemaseat_my_tickets';
 const BRANCH_STORAGE_KEY = 'cinemaseat_selected_branch';
 const CLOUD_SYNC_URL = 'https://jsonblob.com/api/jsonBlob/019fe0b1-ef87-76ed-a02e-d1ead4e15086';
 
+interface BranchHoldState {
+  seatCodes: string[];
+  bookingRef: string;
+  expiresAt: string;
+}
+
 // Helper to construct location & showtime scoped seat key
 const getScopedSeatKey = (branchId: string, showtimeId: string, seatCode: string) => {
   return `${branchId || 'theatre-cuet'}:${showtimeId || 'showtime-spiderman-8pm'}:${seatCode}`;
@@ -118,6 +124,9 @@ export function App() {
   const [showtime, setShowtime] = useState<Showtime | null>(() => MovieFallback.getInitialShowtime());
   const [selectedBranch, setSelectedBranch] = useState<CinemaBranch>(() => getStoredBranch());
   
+  // Persistent Branch Hold Engine State (Keyed by Branch ID)
+  const [branchHoldsStore, setBranchHoldsStore] = useState<Record<string, BranchHoldState>>({});
+
   // Initialize seats state merged with location-scoped booked keys!
   const [seats, setSeats] = useState<Seat[]>(() => {
     const initialSeats = MovieFallback.getInitialSeats();
@@ -183,10 +192,18 @@ export function App() {
         if (seatsRes.data && Array.isArray(seatsRes.data)) {
           const storedBooked = getStoredBookedSeatCodes();
           const stId = showtime?.id || 'showtime-spiderman-8pm';
+          const activeBranchHold = branchHoldsStore[selectedBranch.id];
+          const activeHeldCodes = activeBranchHold ? activeBranchHold.seatCodes : [];
 
           const merged: Seat[] = seatsRes.data.map((s: Seat) => {
             const key = getScopedSeatKey(selectedBranch.id, stId, s.seat_code);
-            return storedBooked.includes(key) ? { ...s, status: 'BOOKED' as const } : s;
+            if (storedBooked.includes(key)) {
+              return { ...s, status: 'BOOKED' as const };
+            }
+            if (activeHeldCodes.includes(s.seat_code)) {
+              return { ...s, status: 'HELD' as const, held_by_user_id: currentUserId, hold_expires_at: activeBranchHold.expiresAt };
+            }
+            return s;
           });
           setSeats(merged);
         }
@@ -196,7 +213,7 @@ export function App() {
     };
     init();
     return () => { isMounted = false; };
-  }, [selectedBranch.id, showtime?.id]);
+  }, [selectedBranch.id, showtime?.id, branchHoldsStore, currentUserId]);
 
   // MULTI-DEVICE CLOUD POLLER: Synchronize booked seats across Phone <-> Laptop in real-time!
   useEffect(() => {
@@ -231,38 +248,54 @@ export function App() {
     };
   }, [selectedBranch.id, showtime?.id]);
 
-  // Switch Cinema Branch / Location — Isolates Seat Maps Per Cinema Branch!
+  // Switch Cinema Branch / Location — Preserves Held Seats Per Location Seamlessly!
   const handleSelectBranch = useCallback((branch: CinemaBranch) => {
     setSelectedBranch(branch);
     try {
       localStorage.setItem(BRANCH_STORAGE_KEY, JSON.stringify(branch));
     } catch (e) {}
 
-    // Re-map seats state specifically for the selected cinema branch!
     const storedBooked = getStoredBookedSeatCodes();
     const initialSeats = MovieFallback.getInitialSeats();
     const stId = showtime?.id || 'showtime-spiderman-8pm';
 
+    // Restore any active held seats for this specific branch
+    const branchHold = branchHoldsStore[branch.id];
+    const branchHeldCodes = branchHold ? branchHold.seatCodes : [];
+
+    if (branchHold && branchHeldCodes.length > 0) {
+      setSelectedSeatCode(branchHeldCodes.join(', '));
+      setHeldBookingRef(branchHold.bookingRef);
+      setHoldExpiresAt(branchHold.expiresAt);
+    } else {
+      setSelectedSeatCode(null);
+      setHeldBookingRef(null);
+      setHoldExpiresAt(null);
+    }
+
     setSeats(prev => initialSeats.map(s => {
       const scopedKey = getScopedSeatKey(branch.id, stId, s.seat_code);
       const isBooked = storedBooked.includes(scopedKey);
-      const isHeldByMe = prev.find(p => p.seat_code === s.seat_code && p.status === 'HELD' && p.held_by_user_id === currentUserId);
+      const isHeldInThisBranch = branchHeldCodes.includes(s.seat_code);
+
       if (isBooked) return { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null };
-      if (isHeldByMe) return { ...isHeldByMe };
+      if (isHeldInThisBranch) {
+        return { ...s, status: 'HELD' as const, held_by_user_id: currentUserId, hold_expires_at: branchHold?.expiresAt || null };
+      }
       return { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null };
     }));
 
-    setToastMessage({ text: `📍 Cinema location switched to ${branch.name} (${branch.city}). Seat map updated!`, type: 'success' });
-  }, [showtime, currentUserId]);
+    if (branchHeldCodes.length > 0) {
+      setToastMessage({ text: `📍 Location switched to ${branch.name}. Restored your ${branchHeldCodes.length} held seat(s): ${branchHeldCodes.join(', ')}!`, type: 'success' });
+    } else {
+      setToastMessage({ text: `📍 Location switched to ${branch.name} (${branch.city}). Fresh seat map loaded!`, type: 'success' });
+    }
+  }, [showtime, currentUserId, branchHoldsStore]);
 
   // Handle Booking Action on any movie card
   const handleBookMovieSeats = useCallback((movie: Movie) => {
     setSelectedMovie(movie);
     setViewMode('BOOKING');
-    setSelectedSeatCode(null);
-    setHeldBookingRef(null);
-    setHoldExpiresAt(null);
-    setSelectedSnacks([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -270,7 +303,7 @@ export function App() {
     setTrailerMovie(movie);
   }, []);
 
-  // Handle Seat Hold Request (Supports Multi-Seat Holding!)
+  // Handle Seat Hold Request (Supports Multi-Seat Holding & Persistent Multi-Branch State!)
   const handleHoldSeat = useCallback(async (seatCode: string) => {
     if (!showtime || isHolding) return;
 
@@ -297,14 +330,25 @@ export function App() {
           setSeats(merged);
 
           const myHeld = merged.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
-          const heldCodes = myHeld.map(s => s.seat_code).join(', ');
-          
-          setSelectedSeatCode(heldCodes);
+          const heldCodes = myHeld.map(s => s.seat_code);
+          const heldCodesStr = heldCodes.join(', ');
+
+          // Update Multi-Branch Hold Engine Store
+          setBranchHoldsStore(prev => ({
+            ...prev,
+            [selectedBranch.id]: {
+              seatCodes: heldCodes,
+              bookingRef: res.data.booking_ref,
+              expiresAt: res.data.hold_expires_at
+            }
+          }));
+
+          setSelectedSeatCode(heldCodesStr);
           setHeldBookingRef(res.data.booking_ref);
           setHoldExpiresAt(res.data.hold_expires_at);
 
           setToastMessage({
-            text: `Seat ${seatCode} held! (${myHeld.length} seat${myHeld.length > 1 ? 's' : ''} total: ${heldCodes}). You have 60s to pay.`,
+            text: `Seat ${seatCode} held at ${selectedBranch.name}! (${heldCodes.length} seat${heldCodes.length > 1 ? 's' : ''} total: ${heldCodesStr}).`,
             type: 'success'
           });
         }
@@ -325,14 +369,24 @@ export function App() {
       setSeats(prev => {
         const updated: Seat[] = prev.map(s => s.seat_code === seatCode ? { ...s, status: 'HELD' as const, held_by_user_id: currentUserId, hold_expires_at: expires } : s);
         const myHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
-        const heldCodes = myHeld.map(s => s.seat_code).join(', ');
-        
-        setSelectedSeatCode(heldCodes);
+        const heldCodes = myHeld.map(s => s.seat_code);
+        const heldCodesStr = heldCodes.join(', ');
+
+        setBranchHoldsStore(bPrev => ({
+          ...bPrev,
+          [selectedBranch.id]: {
+            seatCodes: heldCodes,
+            bookingRef: mockRef,
+            expiresAt: expires
+          }
+        }));
+
+        setSelectedSeatCode(heldCodesStr);
         setHeldBookingRef(mockRef);
         setHoldExpiresAt(expires);
 
         setToastMessage({
-          text: `Seat ${seatCode} held successfully! (${myHeld.length} seat${myHeld.length > 1 ? 's' : ''} total: ${heldCodes}). You have 60 seconds to pay.`,
+          text: `Seat ${seatCode} held at ${selectedBranch.name}! (${heldCodes.length} seat${heldCodes.length > 1 ? 's' : ''} total: ${heldCodesStr}).`,
           type: 'success'
         });
 
@@ -341,29 +395,45 @@ export function App() {
 
       setIsHolding(false);
     }, 400);
-  }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef, selectedBranch.id]);
+  }, [showtime, isHolding, currentUserId, isLiveBackend, heldBookingRef, selectedBranch.id, selectedBranch.name]);
 
   // Handle Single Seat Release Request
   const handleReleaseSingleSeat = useCallback((seatCode: string) => {
     setSeats(prev => {
       const updated: Seat[] = prev.map(s => (s.seat_code === seatCode && s.held_by_user_id === currentUserId) ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s);
       const remainingMyHeld = updated.filter(s => s.status === 'HELD' && s.held_by_user_id === currentUserId);
-      const remainingCodes = remainingMyHeld.map(s => s.seat_code).join(', ');
+      const remainingCodes = remainingMyHeld.map(s => s.seat_code);
+      const remainingCodesStr = remainingCodes.join(', ');
 
-      if (remainingMyHeld.length === 0) {
+      setBranchHoldsStore(bPrev => {
+        if (remainingCodes.length === 0) {
+          const copy = { ...bPrev };
+          delete copy[selectedBranch.id];
+          return copy;
+        }
+        return {
+          ...bPrev,
+          [selectedBranch.id]: {
+            ...bPrev[selectedBranch.id],
+            seatCodes: remainingCodes
+          }
+        };
+      });
+
+      if (remainingCodes.length === 0) {
         setSelectedSeatCode(null);
         setHeldBookingRef(null);
         setHoldExpiresAt(null);
-        setToastMessage({ text: `Released Seat ${seatCode}. All seat holds cleared.`, type: 'success' });
+        setToastMessage({ text: `Released Seat ${seatCode}. All seat holds cleared for ${selectedBranch.name}.`, type: 'success' });
       } else {
-        setSelectedSeatCode(remainingCodes);
-        setToastMessage({ text: `Removed Seat ${seatCode}. Remaining held seats (${remainingMyHeld.length}): ${remainingCodes}`, type: 'success' });
+        setSelectedSeatCode(remainingCodesStr);
+        setToastMessage({ text: `Removed Seat ${seatCode}. Remaining held seats (${remainingCodes.length}): ${remainingCodesStr}`, type: 'success' });
       }
       return updated;
     });
-  }, [currentUserId]);
+  }, [currentUserId, selectedBranch.id, selectedBranch.name]);
 
-  // Handle Manual Cancel Hold Request (Releases ALL held seats for current user at once!)
+  // Handle Manual Cancel Hold Request (Releases ALL held seats for current branch)
   const handleCancelHold = useCallback(async () => {
     if (!showtime) return;
 
@@ -375,17 +445,28 @@ export function App() {
       }
     }
 
-    // Atomic release of ALL seats held by currentUserId
+    setBranchHoldsStore(prev => {
+      const copy = { ...prev };
+      delete copy[selectedBranch.id];
+      return copy;
+    });
+
     setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s));
-    setToastMessage({ text: `All seat holds cancelled! All seats returned to Available.`, type: 'success' });
+    setToastMessage({ text: `All seat holds cancelled for ${selectedBranch.name}! Seats returned to Available.`, type: 'success' });
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
     setHoldExpiresAt(null);
     setSelectedSnacks([]);
-  }, [heldBookingRef, showtime, currentUserId, isLiveBackend]);
+  }, [heldBookingRef, showtime, currentUserId, isLiveBackend, selectedBranch.id, selectedBranch.name]);
 
   // Handle Automatic Hold Expiration
   const handleHoldExpired = useCallback(async () => {
+    setBranchHoldsStore(prev => {
+      const copy = { ...prev };
+      delete copy[selectedBranch.id];
+      return copy;
+    });
+
     setSeats(prev => prev.map(s => s.held_by_user_id === currentUserId ? { ...s, status: 'AVAILABLE' as const, held_by_user_id: null, hold_expires_at: null } : s));
     setSelectedSeatCode(null);
     setHeldBookingRef(null);
@@ -395,10 +476,10 @@ export function App() {
     setSelectedSnacks([]);
 
     setToastMessage({
-      text: `⏰ Seat hold time has expired! Seats released back to Available.`,
+      text: `⏰ Seat hold time has expired for ${selectedBranch.name}! Seats released back to Available.`,
       type: 'error'
     });
-  }, [currentUserId]);
+  }, [currentUserId, selectedBranch.id, selectedBranch.name]);
 
   const featuredMovie = movies.find(m => m.id === 'movie-spiderman') || movies[0];
 
@@ -567,6 +648,13 @@ export function App() {
               const scopedKey = getScopedSeatKey(selectedBranch.id, stId, code);
               saveBookedSeatCode(scopedKey);
               syncBookedSeatToCloud(scopedKey);
+            });
+
+            // Clear branch hold store for this branch
+            setBranchHoldsStore(prev => {
+              const copy = { ...prev };
+              delete copy[selectedBranch.id];
+              return copy;
             });
 
             setSeats(prev => prev.map(s => (targetCodes.includes(s.seat_code) || (s.status === 'HELD' && s.held_by_user_id === currentUserId)) ? { ...s, status: 'BOOKED' as const, held_by_user_id: null, hold_expires_at: null } : s));

@@ -70,11 +70,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </button>
 
-          {/* Location / Cinema Branch Switcher Button */}
-          {onOpenBranchModal && selectedBranch && (
+          {/* Location / Cinema Branch Switcher Button (ONLY VISIBLE ON BOOKING SEAT PAGE!) */}
+          {onOpenBranchModal && selectedBranch && viewMode === 'BOOKING' && (
             <button
               onClick={onOpenBranchModal}
-              className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-700 text-gray-200 font-bold text-[11px] sm:text-xs border border-gray-700 flex items-center gap-1.5 transition shrink-0"
+              className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-700 text-gray-200 font-bold text-[11px] sm:text-xs border border-gray-700 flex items-center gap-1.5 transition shrink-0 animate-fade-in"
               title="Change Cinema Branch & City"
             >
               <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
